@@ -34,6 +34,9 @@
       </div>
       <div class="lcd-status" id="lcdStatus">READY</div>
       <div class="screen-flash" id="screenFlash"></div>
+      <div class="long-freeze" id="longFreeze" aria-hidden="true">
+        <video id="longFreezeVideo" class="long-freeze-video" src="assets/lcd/long-freeze.mp4" preload="auto" muted playsinline></video>
+      </div>
     </section>
 
     <section class="reel-window" aria-label="リール">
@@ -62,7 +65,7 @@
     <div class="meter"><span>ベル</span><b id="bellRate">-</b></div>
     <div class="meter"><span>状態</span><b id="modeText">通常</b></div>
     <div class="meter"><span>SBB</span><b id="sbbCount">0</b></div>
-    <div class="meter"><span>DOOR</span><b id="doorCount">-</b></div>
+    <div class="meter"><span>SURVIVE</span><b id="doorCount">-</b></div>
   </section>
 
   <aside class="sub-panel" id="subPanel">
@@ -78,7 +81,7 @@
           <option value="6">6</option>
         </select>
       </label>
-      <p class="spec-note">小役重複 / SBB・BB・REG / DOOR MODE搭載</p>
+      <p class="spec-note">小役重複 / SBB・BB・REG / SURVIVE ZONE搭載</p>
     </section>
     <section class="card">
       <h2>STAGE</h2>
