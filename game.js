@@ -95,7 +95,7 @@ const state = {
   credit:50, bet:0, pay:0, diff:0, games:0, big:0, reg:0, sbb:0, bell:0, spinning:false,
   stopped:[true,true,true], result:null, center:['blue7','bell','cherry'], history:[], stage:0,
   enemyA:'highschool_girl', enemyB:'salaryman', pendingBonus:null, bonusReady:false, setting:1, door:0, doorHits:0,
-  presentation:'crate', challenge:null, bonusActive:null, reelBases:[0,0,0], stopIndices:[0,0,0], spinStartedAt:0, longFreeze:false
+  presentation:'crate', challenge:null, bonusActive:null, reelBases:[0,0,0], stopIndices:[0,0,0], spinStartedAt:0, longFreeze:false, forceLongFreeze:false
 };
 
 const els = {
@@ -150,10 +150,19 @@ function bind(){
  $('#pushBtn').addEventListener('click', pushAction);
  document.querySelectorAll('.stop-hit').forEach(btn=>btn.addEventListener('click',()=>stopReel(Number(btn.dataset.stop))));
  $('#resetBtn').addEventListener('click', reset);
+ $('#forceFreezeUiBtn')?.addEventListener('click', reserveLongFreeze);
  if(els.settingSelect){
    els.settingSelect.value = String(state.setting);
    els.settingSelect.addEventListener('change', e => { state.setting = Number(e.target.value); update(); });
  }
+}
+function reserveLongFreeze(){
+ if(state.spinning || state.challenge || state.bonusActive || state.longFreeze) return;
+ state.forceLongFreeze = true;
+ clearBonusConfirm();
+ playEffect('special', 'NEXT FREEZE');
+ pushHistory('DEBUG NEXT LONG FREEZE', 0);
+ update();
 }
 function renderLegend(){
  const list=[['red7','RED 7'],['blue7','BLUE 7'],['bar','BAR'],['bell','BAT / BELL'],['suika','AMMO / SUIKA'],['cherry','CHERRY'],['replay','REPLAY'],['hero','HERO']];
@@ -333,6 +342,7 @@ function revealPrizeScene(result){
 }
 function choosePresentation(result){
  if(result?.challenge) return Math.random() < .62 ? 'horde' : 'drop';
+ if(result?.forceLongFreeze) return 'freeze';
  if(result?.bonus && Math.random() < .35) return 'freeze';
  if(result?.bonus) return Math.random() < .55 ? 'horde' : 'drop';
  if(result?.role === 'REPLAY') return Math.random() < .55 ? 'horde' : 'crate';
@@ -473,7 +483,7 @@ function leverOn(){
  if(!state.bonusActive && state.bet<3)return;
  clearPrizeScene();
  clearBossBattle();
- clearBonusConfirm();
+ if(!state.pendingBonus) clearBonusConfirm();
  const doorActive = state.door > 0;
  els.lcdStatus.textContent=state.bonusActive ? 'BONUS' : (state.pendingBonus ? 'BONUS?' : (doorActive ? 'SURVIVE' : '...'));
  state.games++;
@@ -501,6 +511,12 @@ function drawBaseRole(){
  return roles.at(-1);
 }
 function drawOutcome(){
+ if(state.forceLongFreeze){
+   state.forceLongFreeze = false;
+   const bonusType = chooseBonusType();
+   const stop = buildLineStop(bonusInfo[bonusType].center, weightedPick(payLines), true);
+   return {role:'FREEZE', chance:1, bonus:bonusType, hiddenBonus:null, challenge:false, forceLongFreeze:true, ...stop, badge:bonusInfo[bonusType].badge, effect:'special'};
+ }
  const base = drawBaseRole();
  const table = bonusTable[state.setting];
  const doorBoost = state.door > 0 ? 1/115 : 0;
@@ -527,7 +543,7 @@ function drawPendingBonusOutcome(){
  const bonus = state.pendingBonus;
  const info = bonusInfo[bonus];
  const base = drawBaseRole();
- const readyChance = state.door > 0 ? .42 : .34;
+ const readyChance = 1;
  if(Math.random() < readyChance){
    const stop = buildLineStop(info.center, weightedPick(payLines), true);
    return {role:'BONUS_READY', chance:1, ...stop, pay:0, badge:info.badge, effect:'special', bonusReady:bonus};
@@ -587,8 +603,10 @@ function chooseTimedStopIndex(i){
  const desired = intentSymbolAtReel(i);
  const row = state.result?.line?.rows?.[i] ?? 1;
  if(desired){
+   const assistRoles = ['BONUS_READY','REPLAY','BELL','BONUS_GAME'];
+   const maxSlip = assistRoles.includes(state.result?.role) ? arr.length - 1 : MAX_SLIP;
    const candidates = [];
-   for(let slip=0; slip<=MAX_SLIP; slip++){
+   for(let slip=0; slip<=maxSlip; slip++){
      const centerIndex = modIndex(base + slip, arr.length);
      if(getRowsForCenter(i, centerIndex)[row] === desired) candidates.push({centerIndex, slip});
    }
@@ -749,6 +767,7 @@ function settle(){
    setTimeout(()=>{ if(!state.spinning && !state.pendingBonus) startBonusChallenge(r); }, 760);
  }else{
    state.credit+=state.pay; state.diff+=state.pay;
+   if(state.pendingBonus) showBonusConfirm();
    pushHistory(`${r.role}${lineText(r)}`, state.pay);
  }
  update();
@@ -799,13 +818,14 @@ function update(){
  $('#leverBtn').disabled=state.spinning||(!state.bonusActive&&state.bet<3)||!!state.challenge||state.longFreeze; $('#maxBetBtn').disabled=state.spinning||state.bet===3||state.credit<1||!!state.challenge||!!state.bonusActive||state.longFreeze; if(els.pushBtn) els.pushBtn.disabled=state.longFreeze;
  if(els.settingSelect) els.settingSelect.disabled = state.spinning || !!state.challenge;
 }
-function reset(){ Object.assign(state,{credit:50,bet:0,pay:0,diff:0,games:0,big:0,reg:0,sbb:0,bell:0,spinning:false,stopped:[true,true,true],result:null,center:['blue7','bell','cherry'],history:[],stage:0,pendingBonus:null,bonusReady:false,door:0,doorHits:0,presentation:'crate',challenge:null,bonusActive:null,reelBases:[0,0,0],stopIndices:[0,0,0],spinStartedAt:0,longFreeze:false}); clearPrizeScene(); clearBossBattle(); clearBonusConfirm(); clearLongFreeze(); clearBonusLcd(); randomizeActors(); setStage(0); playEffect('miss','READY'); setCenter(state.center); update(); }
+function reset(){ Object.assign(state,{credit:50,bet:0,pay:0,diff:0,games:0,big:0,reg:0,sbb:0,bell:0,spinning:false,stopped:[true,true,true],result:null,center:['blue7','bell','cherry'],history:[],stage:0,pendingBonus:null,bonusReady:false,door:0,doorHits:0,presentation:'crate',challenge:null,bonusActive:null,reelBases:[0,0,0],stopIndices:[0,0,0],spinStartedAt:0,longFreeze:false,forceLongFreeze:false}); clearPrizeScene(); clearBossBattle(); clearBonusConfirm(); clearLongFreeze(); clearBonusLcd(); randomizeActors(); setStage(0); playEffect('miss','READY'); setCenter(state.center); update(); }
 function rand(n){return Math.floor(Math.random()*n)}
 function renderDebugTools(){
  if(!document.body.classList.contains('debug-position') || $('#reelExportBtn')) return;
  const panel = $('#subPanel');
  if(!panel) return;
- panel.insertAdjacentHTML('beforeend', '<section class="card debug-tools"><h2>DEBUG</h2><button id="reelExportBtn" type="button">EXPORT REEL PNG</button></section>');
+ panel.insertAdjacentHTML('beforeend', '<section class="card debug-tools"><h2>DEBUG</h2><button id="forceLongFreezeBtn" type="button">NEXT LONG FREEZE</button><button id="reelExportBtn" type="button">EXPORT REEL PNG</button></section>');
+ $('#forceLongFreezeBtn').addEventListener('click', reserveLongFreeze);
  $('#reelExportBtn').addEventListener('click', exportReelStripImages);
 }
 function loadImage(src){
