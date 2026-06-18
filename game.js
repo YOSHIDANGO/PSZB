@@ -619,7 +619,22 @@ function chooseStopIndex(i,key,controlled=false){
  return matches[rand(matches.length)];
 }
 function alignReel(i,key,controlled=false){ const strip=els.reels[i].querySelector('.strip'); const arr=reelMap[i]; let index=chooseStopIndex(i,key,controlled); strip.classList.remove('spinning'); const h=getCellHeight(); const targetIndex=arr.length+index-1; strip.style.transition='transform .42s cubic-bezier(.16,1,.3,1)'; strip.style.transform=`translateY(${-h*targetIndex}px)`; }
-function alignReelToIndex(i,index){ const strip=els.reels[i].querySelector('.strip'); const arr=reelMap[i]; const safeIndex=modIndex(Number.isFinite(index)?index:0, arr.length); strip.classList.remove('spinning'); const h=getCellHeight(); const targetIndex=arr.length+safeIndex-1; strip.style.transition='transform .42s cubic-bezier(.16,1,.3,1)'; strip.style.transform=`translateY(${-h*targetIndex}px)`; }
+function alignReelToIndex(i,index,slideDown=false){
+ const strip=els.reels[i].querySelector('.strip');
+ const arr=reelMap[i];
+ const safeIndex=modIndex(Number.isFinite(index)?index:0, arr.length);
+ strip.classList.remove('spinning');
+ const h=getCellHeight();
+ const targetIndex=arr.length+safeIndex-1;
+ if(slideDown){
+   const startIndex=Math.min(targetIndex+6, arr.length*3-3);
+   strip.style.transition='none';
+   strip.style.transform=`translateY(${-h*startIndex}px)`;
+   strip.offsetHeight;
+ }
+ strip.style.transition='transform .42s cubic-bezier(.16,1,.3,1)';
+ strip.style.transform=`translateY(${-h*targetIndex}px)`;
+}
 function setCenter(keys){keys.forEach((k,i)=>alignReel(i,k))}
 function getCellHeight(){ return document.querySelector('.symbol')?.getBoundingClientRect().height || 66; }
 
