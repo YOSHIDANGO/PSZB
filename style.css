@@ -1291,8 +1291,7 @@ body.debug-position .stop-hit{
 
 /* v22: cabinet top counters are numbers only, aligned to printed windows */
 .counter-live{
-  top:4.05% !important;
-  height:2.6% !important;
+  height:2.05% !important;
   display:flex !important;
   align-items:center !important;
   justify-content:center !important;
@@ -1301,22 +1300,21 @@ body.debug-position .stop-hit{
   display:none !important;
 }
 .counter-live b{
-  font-size:clamp(11px,1.85vw,20px) !important;
+  font-size:clamp(9px,1.55vw,17px) !important;
   line-height:1 !important;
   color:rgba(255,52,72,.9) !important;
   text-shadow:0 0 5px rgba(255,0,20,.8),0 0 1px #000 !important;
 }
-.counter-live.total{left:31.2% !important;width:5.4% !important}
-.counter-live.big{left:44.4% !important;width:3.6% !important}
-.counter-live.reg{left:60.2% !important;width:3.6% !important}
-.counter-live.credit{left:70.9% !important;width:6.2% !important}
+.counter-live.total{top:5.05% !important;left:32.2% !important;width:4.4% !important}
+.counter-live.big{top:5.02% !important;left:45.0% !important;width:2.8% !important}
+.counter-live.reg{top:5.02% !important;left:60.8% !important;width:2.8% !important}
+.counter-live.credit{top:5.06% !important;left:67.2% !important;width:5.8% !important}
 
 @media(max-width:560px){
   .counter-live{
-    top:4.05% !important;
     height:2.5% !important;
   }
   .counter-live b{
-    font-size:12px !important;
+    font-size:10px !important;
   }
 }
