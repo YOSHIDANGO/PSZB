@@ -1,0 +1,305 @@
+{
+  "hero": {
+    "school": [
+      "assets/sprites/hero/school/00.png",
+      "assets/sprites/hero/school/01.png",
+      "assets/sprites/hero/school/02.png",
+      "assets/sprites/hero/school/03.png",
+      "assets/sprites/hero/school/04.png",
+      "assets/sprites/hero/school/05.png",
+      "assets/sprites/hero/school/06.png",
+      "assets/sprites/hero/school/07.png",
+      "assets/sprites/hero/school/08.png",
+      "assets/sprites/hero/school/09.png",
+      "assets/sprites/hero/school/10.png"
+    ],
+    "rush": [
+      "assets/sprites/hero/rush/00.png",
+      "assets/sprites/hero/rush/01.png",
+      "assets/sprites/hero/rush/02.png",
+      "assets/sprites/hero/rush/03.png",
+      "assets/sprites/hero/rush/04.png",
+      "assets/sprites/hero/rush/05.png",
+      "assets/sprites/hero/rush/06.png",
+      "assets/sprites/hero/rush/07.png",
+      "assets/sprites/hero/rush/08.png",
+      "assets/sprites/hero/rush/09.png",
+      "assets/sprites/hero/rush/10.png"
+    ],
+    "kimono": [
+      "assets/sprites/hero/kimono/00.png",
+      "assets/sprites/hero/kimono/01.png",
+      "assets/sprites/hero/kimono/02.png",
+      "assets/sprites/hero/kimono/03.png",
+      "assets/sprites/hero/kimono/04.png",
+      "assets/sprites/hero/kimono/05.png",
+      "assets/sprites/hero/kimono/06.png",
+      "assets/sprites/hero/kimono/07.png",
+      "assets/sprites/hero/kimono/08.png",
+      "assets/sprites/hero/kimono/09.png",
+      "assets/sprites/hero/kimono/10.png"
+    ],
+    "nurse": [
+      "assets/sprites/hero/nurse/00.png",
+      "assets/sprites/hero/nurse/01.png",
+      "assets/sprites/hero/nurse/02.png",
+      "assets/sprites/hero/nurse/03.png",
+      "assets/sprites/hero/nurse/04.png",
+      "assets/sprites/hero/nurse/05.png",
+      "assets/sprites/hero/nurse/06.png",
+      "assets/sprites/hero/nurse/07.png",
+      "assets/sprites/hero/nurse/08.png",
+      "assets/sprites/hero/nurse/09.png",
+      "assets/sprites/hero/nurse/10.png"
+    ]
+  },
+  "enemies": {
+    "highschool_girl": [
+      "assets/sprites/enemies/highschool_girl/00.png",
+      "assets/sprites/enemies/highschool_girl/01.png",
+      "assets/sprites/enemies/highschool_girl/02.png",
+      "assets/sprites/enemies/highschool_girl/03.png",
+      "assets/sprites/enemies/highschool_girl/04.png",
+      "assets/sprites/enemies/highschool_girl/05.png",
+      "assets/sprites/enemies/highschool_girl/06.png",
+      "assets/sprites/enemies/highschool_girl/07.png"
+    ],
+    "boy_student": [
+      "assets/sprites/enemies/boy_student/00.png",
+      "assets/sprites/enemies/boy_student/01.png",
+      "assets/sprites/enemies/boy_student/02.png",
+      "assets/sprites/enemies/boy_student/03.png",
+      "assets/sprites/enemies/boy_student/04.png",
+      "assets/sprites/enemies/boy_student/05.png",
+      "assets/sprites/enemies/boy_student/06.png",
+      "assets/sprites/enemies/boy_student/07.png"
+    ],
+    "cabaret_girl": [
+      "assets/sprites/enemies/cabaret_girl/00.png",
+      "assets/sprites/enemies/cabaret_girl/01.png",
+      "assets/sprites/enemies/cabaret_girl/02.png",
+      "assets/sprites/enemies/cabaret_girl/03.png",
+      "assets/sprites/enemies/cabaret_girl/04.png",
+      "assets/sprites/enemies/cabaret_girl/05.png",
+      "assets/sprites/enemies/cabaret_girl/06.png",
+      "assets/sprites/enemies/cabaret_girl/07.png"
+    ],
+    "clerk": [
+      "assets/sprites/enemies/clerk/00.png",
+      "assets/sprites/enemies/clerk/01.png",
+      "assets/sprites/enemies/clerk/02.png",
+      "assets/sprites/enemies/clerk/03.png",
+      "assets/sprites/enemies/clerk/04.png",
+      "assets/sprites/enemies/clerk/05.png",
+      "assets/sprites/enemies/clerk/06.png",
+      "assets/sprites/enemies/clerk/07.png"
+    ],
+    "college_girl": [
+      "assets/sprites/enemies/college_girl/00.png",
+      "assets/sprites/enemies/college_girl/01.png",
+      "assets/sprites/enemies/college_girl/02.png",
+      "assets/sprites/enemies/college_girl/03.png",
+      "assets/sprites/enemies/college_girl/04.png",
+      "assets/sprites/enemies/college_girl/05.png",
+      "assets/sprites/enemies/college_girl/06.png",
+      "assets/sprites/enemies/college_girl/07.png"
+    ],
+    "courier": [
+      "assets/sprites/enemies/courier/00.png",
+      "assets/sprites/enemies/courier/01.png",
+      "assets/sprites/enemies/courier/02.png",
+      "assets/sprites/enemies/courier/03.png",
+      "assets/sprites/enemies/courier/04.png",
+      "assets/sprites/enemies/courier/05.png",
+      "assets/sprites/enemies/courier/06.png",
+      "assets/sprites/enemies/courier/07.png"
+    ],
+    "female_teacher": [
+      "assets/sprites/enemies/female_teacher/00.png",
+      "assets/sprites/enemies/female_teacher/01.png",
+      "assets/sprites/enemies/female_teacher/02.png",
+      "assets/sprites/enemies/female_teacher/03.png",
+      "assets/sprites/enemies/female_teacher/04.png",
+      "assets/sprites/enemies/female_teacher/05.png",
+      "assets/sprites/enemies/female_teacher/06.png",
+      "assets/sprites/enemies/female_teacher/07.png"
+    ],
+    "gal": [
+      "assets/sprites/enemies/gal/00.png",
+      "assets/sprites/enemies/gal/01.png",
+      "assets/sprites/enemies/gal/02.png",
+      "assets/sprites/enemies/gal/03.png",
+      "assets/sprites/enemies/gal/04.png",
+      "assets/sprites/enemies/gal/05.png",
+      "assets/sprites/enemies/gal/06.png",
+      "assets/sprites/enemies/gal/07.png"
+    ],
+    "girl_gym": [
+      "assets/sprites/enemies/girl_gym/00.png",
+      "assets/sprites/enemies/girl_gym/01.png",
+      "assets/sprites/enemies/girl_gym/02.png",
+      "assets/sprites/enemies/girl_gym/03.png",
+      "assets/sprites/enemies/girl_gym/04.png",
+      "assets/sprites/enemies/girl_gym/05.png",
+      "assets/sprites/enemies/girl_gym/06.png",
+      "assets/sprites/enemies/girl_gym/07.png"
+    ],
+    "girl_uniform": [
+      "assets/sprites/enemies/girl_uniform/00.png",
+      "assets/sprites/enemies/girl_uniform/01.png",
+      "assets/sprites/enemies/girl_uniform/02.png",
+      "assets/sprites/enemies/girl_uniform/03.png",
+      "assets/sprites/enemies/girl_uniform/04.png",
+      "assets/sprites/enemies/girl_uniform/05.png",
+      "assets/sprites/enemies/girl_uniform/06.png",
+      "assets/sprites/enemies/girl_uniform/07.png"
+    ],
+    "security_guard": [
+      "assets/sprites/enemies/security_guard/00.png",
+      "assets/sprites/enemies/security_guard/01.png",
+      "assets/sprites/enemies/security_guard/02.png",
+      "assets/sprites/enemies/security_guard/03.png",
+      "assets/sprites/enemies/security_guard/04.png",
+      "assets/sprites/enemies/security_guard/05.png",
+      "assets/sprites/enemies/security_guard/06.png",
+      "assets/sprites/enemies/security_guard/07.png"
+    ],
+    "housewife": [
+      "assets/sprites/enemies/housewife/00.png",
+      "assets/sprites/enemies/housewife/01.png",
+      "assets/sprites/enemies/housewife/02.png",
+      "assets/sprites/enemies/housewife/03.png",
+      "assets/sprites/enemies/housewife/04.png",
+      "assets/sprites/enemies/housewife/05.png",
+      "assets/sprites/enemies/housewife/06.png",
+      "assets/sprites/enemies/housewife/07.png"
+    ],
+    "influencer": [
+      "assets/sprites/enemies/influencer/00.png",
+      "assets/sprites/enemies/influencer/01.png",
+      "assets/sprites/enemies/influencer/02.png",
+      "assets/sprites/enemies/influencer/03.png",
+      "assets/sprites/enemies/influencer/04.png",
+      "assets/sprites/enemies/influencer/05.png",
+      "assets/sprites/enemies/influencer/06.png",
+      "assets/sprites/enemies/influencer/07.png"
+    ],
+    "model": [
+      "assets/sprites/enemies/model/00.png",
+      "assets/sprites/enemies/model/01.png",
+      "assets/sprites/enemies/model/02.png",
+      "assets/sprites/enemies/model/03.png",
+      "assets/sprites/enemies/model/04.png",
+      "assets/sprites/enemies/model/05.png",
+      "assets/sprites/enemies/model/06.png",
+      "assets/sprites/enemies/model/07.png"
+    ],
+    "office_lady": [
+      "assets/sprites/enemies/office_lady/00.png",
+      "assets/sprites/enemies/office_lady/01.png",
+      "assets/sprites/enemies/office_lady/02.png",
+      "assets/sprites/enemies/office_lady/03.png",
+      "assets/sprites/enemies/office_lady/04.png",
+      "assets/sprites/enemies/office_lady/05.png",
+      "assets/sprites/enemies/office_lady/06.png",
+      "assets/sprites/enemies/office_lady/07.png"
+    ],
+    "passenger": [
+      "assets/sprites/enemies/passenger/00.png",
+      "assets/sprites/enemies/passenger/01.png",
+      "assets/sprites/enemies/passenger/02.png",
+      "assets/sprites/enemies/passenger/03.png",
+      "assets/sprites/enemies/passenger/04.png",
+      "assets/sprites/enemies/passenger/05.png",
+      "assets/sprites/enemies/passenger/06.png",
+      "assets/sprites/enemies/passenger/07.png"
+    ],
+    "receptionist": [
+      "assets/sprites/enemies/receptionist/00.png",
+      "assets/sprites/enemies/receptionist/01.png",
+      "assets/sprites/enemies/receptionist/02.png",
+      "assets/sprites/enemies/receptionist/03.png",
+      "assets/sprites/enemies/receptionist/04.png",
+      "assets/sprites/enemies/receptionist/05.png",
+      "assets/sprites/enemies/receptionist/06.png",
+      "assets/sprites/enemies/receptionist/07.png"
+    ],
+    "salaryman": [
+      "assets/sprites/enemies/salaryman/00.png",
+      "assets/sprites/enemies/salaryman/01.png",
+      "assets/sprites/enemies/salaryman/02.png",
+      "assets/sprites/enemies/salaryman/03.png",
+      "assets/sprites/enemies/salaryman/04.png",
+      "assets/sprites/enemies/salaryman/05.png",
+      "assets/sprites/enemies/salaryman/06.png",
+      "assets/sprites/enemies/salaryman/07.png"
+    ],
+    "secretary": [
+      "assets/sprites/enemies/secretary/00.png",
+      "assets/sprites/enemies/secretary/01.png",
+      "assets/sprites/enemies/secretary/02.png",
+      "assets/sprites/enemies/secretary/03.png",
+      "assets/sprites/enemies/secretary/04.png",
+      "assets/sprites/enemies/secretary/05.png",
+      "assets/sprites/enemies/secretary/06.png",
+      "assets/sprites/enemies/secretary/07.png"
+    ],
+    "zombie_default": [
+      "assets/sprites/enemies/zombie_default/00.png",
+      "assets/sprites/enemies/zombie_default/01.png",
+      "assets/sprites/enemies/zombie_default/02.png",
+      "assets/sprites/enemies/zombie_default/03.png",
+      "assets/sprites/enemies/zombie_default/04.png",
+      "assets/sprites/enemies/zombie_default/05.png",
+      "assets/sprites/enemies/zombie_default/06.png",
+      "assets/sprites/enemies/zombie_default/07.png"
+    ],
+    "shopper": [
+      "assets/sprites/enemies/shopper/00.png",
+      "assets/sprites/enemies/shopper/01.png",
+      "assets/sprites/enemies/shopper/02.png",
+      "assets/sprites/enemies/shopper/03.png",
+      "assets/sprites/enemies/shopper/04.png",
+      "assets/sprites/enemies/shopper/05.png",
+      "assets/sprites/enemies/shopper/06.png",
+      "assets/sprites/enemies/shopper/07.png"
+    ],
+    "station_staff": [
+      "assets/sprites/enemies/station_staff/00.png",
+      "assets/sprites/enemies/station_staff/01.png",
+      "assets/sprites/enemies/station_staff/02.png",
+      "assets/sprites/enemies/station_staff/03.png",
+      "assets/sprites/enemies/station_staff/04.png",
+      "assets/sprites/enemies/station_staff/05.png",
+      "assets/sprites/enemies/station_staff/06.png",
+      "assets/sprites/enemies/station_staff/07.png"
+    ],
+    "yankee_boy": [
+      "assets/sprites/enemies/yankee_boy/00.png",
+      "assets/sprites/enemies/yankee_boy/01.png",
+      "assets/sprites/enemies/yankee_boy/02.png",
+      "assets/sprites/enemies/yankee_boy/03.png",
+      "assets/sprites/enemies/yankee_boy/04.png",
+      "assets/sprites/enemies/yankee_boy/05.png",
+      "assets/sprites/enemies/yankee_boy/06.png",
+      "assets/sprites/enemies/yankee_boy/07.png"
+    ],
+    "yankee_girl": [
+      "assets/sprites/enemies/yankee_girl/00.png",
+      "assets/sprites/enemies/yankee_girl/01.png",
+      "assets/sprites/enemies/yankee_girl/02.png",
+      "assets/sprites/enemies/yankee_girl/03.png",
+      "assets/sprites/enemies/yankee_girl/04.png",
+      "assets/sprites/enemies/yankee_girl/05.png",
+      "assets/sprites/enemies/yankee_girl/06.png",
+      "assets/sprites/enemies/yankee_girl/07.png"
+    ]
+  },
+  "backgrounds": {
+    "corridor": "assets/backgrounds/corridor.png",
+    "city_downtown": "assets/backgrounds/city_downtown.png",
+    "school_corridor": "assets/backgrounds/school_corridor.png",
+    "station_platform": "assets/backgrounds/station_platform.png",
+    "residential": "assets/backgrounds/residential.png"
+  }
+}

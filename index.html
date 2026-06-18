@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>DIE YET TYPE-A</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="app">
+  <section class="cabinet-game" aria-label="DIE YET パチスロシミュレーター">
+    <img class="cabinet-img" src="assets/cabinet/cabinet-main.png" alt="DIE YET 筐体">
+
+    <div class="counter-live total"><span>TOTAL</span><b id="games">0</b></div>
+    <div class="counter-live big"><span>BB</span><b id="bigCount">0</b></div>
+    <div class="counter-live reg"><span>RB</span><b id="regCount">0</b></div>
+    <div class="counter-live credit"><span>CREDIT</span><b id="credit">50</b></div>
+
+    <section class="lcd-window" aria-label="液晶演出">
+      <img id="stageBg" class="stage-bg" src="assets/backgrounds/corridor.png" alt="">
+      <div class="stage-vignette"></div>
+      <img id="hero" class="actor hero" src="" alt="">
+      <img id="enemyA" class="actor enemy enemy-a" src="" alt="">
+      <img id="enemyB" class="actor enemy enemy-b" src="" alt="">
+      <div class="boss-battle" id="bossBattle" aria-hidden="true">
+        <div class="boss-sprite" id="bossSprite"></div>
+        <div class="boss-rate" id="bossRate"></div>
+      </div>
+      <div class="prize-scene" id="prizeScene" aria-hidden="true">
+        <div class="horde-silhouette" id="hordeSilhouette"></div>
+        <div class="prize-box" id="prizeBox"></div>
+        <div class="prize-burst" id="prizeBurst"></div>
+        <img class="prize-symbol" id="prizeSymbol" src="" alt="">
+      </div>
+      <div class="lcd-status" id="lcdStatus">READY</div>
+      <div class="screen-flash" id="screenFlash"></div>
+    </section>
+
+    <section class="reel-window" aria-label="リール">
+      <div class="payline"></div>
+      <div class="reels" id="reels">
+        <div class="reel" data-reel="0"></div>
+        <div class="reel" data-reel="1"></div>
+        <div class="reel" data-reel="2"></div>
+      </div>
+    </section>
+
+    <button id="maxBetBtn" class="hit-area hit-maxbet" aria-label="MAX BET"></button>
+    <button id="pushBtn" class="hit-area hit-push" aria-label="PUSH BUTTON"></button>
+    <button class="hit-area stop-hit hit-stop1" data-stop="0" aria-label="STOP 1"></button>
+    <button class="hit-area stop-hit hit-stop2" data-stop="1" aria-label="STOP 2"></button>
+    <button class="hit-area stop-hit hit-stop3" data-stop="2" aria-label="STOP 3"></button>
+    <button id="leverBtn" class="hit-area hit-lever" aria-label="LEVER ON"></button>
+    <button id="resetBtn" class="reset-float">RESET</button>
+  </section>
+
+  <section class="mobile-control">
+    <div class="meter"><span>BET</span><b id="bet">0</b></div>
+    <div class="meter"><span>PAY</span><b id="pay">0</b></div>
+    <div class="meter"><span>差枚</span><b id="diff">0</b></div>
+    <div class="meter"><span>合算</span><b id="bonusRate">-</b></div>
+    <div class="meter"><span>ベル</span><b id="bellRate">-</b></div>
+    <div class="meter"><span>状態</span><b id="modeText">通常</b></div>
+    <div class="meter"><span>SBB</span><b id="sbbCount">0</b></div>
+    <div class="meter"><span>DOOR</span><b id="doorCount">-</b></div>
+  </section>
+
+  <aside class="sub-panel" id="subPanel">
+    <section class="card spec-card">
+      <h2>TYPE-A SPEC</h2>
+      <label class="setting-row">設定
+        <select id="settingSelect">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+        </select>
+      </label>
+      <p class="spec-note">小役重複 / SBB・BB・REG / DOOR MODE搭載</p>
+    </section>
+    <section class="card">
+      <h2>STAGE</h2>
+      <div class="stage-buttons" id="stageButtons"></div>
+    </section>
+    <section class="card">
+      <h2>履歴</h2>
+      <ol id="history"></ol>
+    </section>
+    <section class="card">
+      <h2>SYMBOL</h2>
+      <div class="legend" id="symbolLegend"></div>
+    </section>
+  </aside>
+</main>
+<script src="game.js"></script>
+</body>
+</html>
