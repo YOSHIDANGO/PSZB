@@ -132,6 +132,33 @@ body:before{
 .lcd-window.boss-mode .enemy{
   display:none;
 }
+.lcd-window.scene-idle .enemy,
+.lcd-window.scene-hint .enemy,
+.lcd-window.scene-run .enemy,
+.lcd-window.scene-crate .enemy{
+  opacity:0;
+}
+.lcd-window.scene-zombie .hero{
+  opacity:0;
+}
+.lcd-window.scene-run .hero.anim-run{
+  animation:heroCrossRun .78s linear both;
+}
+.lcd-window.scene-combat .enemy-a{
+  opacity:.98;
+  right:17%;
+}
+.lcd-window.scene-combat .enemy-b{
+  opacity:.74;
+  right:5%;
+}
+.lcd-window.scene-crate .prize-box{
+  left:60%;
+}
+.lcd-window.scene-crate .prize-symbol,
+.lcd-window.scene-crate .prize-burst{
+  left:60%;
+}
 .boss-battle{
   position:absolute;
   inset:0;
@@ -865,14 +892,15 @@ body:before{
 @keyframes burstPop{0%{opacity:0;transform:translate(-50%,20%) scale(.2) rotate(0)}38%{opacity:1;transform:translate(-50%,0) scale(1.05) rotate(18deg)}100%{opacity:0;transform:translate(-50%,-12%) scale(1.45) rotate(34deg)}}
 @keyframes symbolReveal{0%{opacity:0;transform:translate(-50%,12%) scale(.25)}55%{opacity:1;transform:translate(-50%,-8%) scale(1.1)}100%{opacity:1;transform:translate(-50%,0) scale(1)}}
 @keyframes symbolDrop{0%{opacity:0;transform:translate(-50%,-60%) scale(.4) rotate(-12deg)}35%{opacity:1;transform:translate(-50%,4%) scale(1.08) rotate(5deg)}58%{transform:translate(-50%,-4%) scale(.96) rotate(-2deg)}100%{opacity:1;transform:translate(-50%,0) scale(1) rotate(0)}}
-@keyframes hordeRun{0%{opacity:.78;transform:translateX(0)}100%{opacity:.78;transform:translateX(24%)}}
-@keyframes hordeExit{0%{opacity:.9;transform:translateX(5%)}100%{opacity:0;transform:translateX(62%)}}
+@keyframes hordeRun{0%{opacity:.78;transform:translateX(34%)}100%{opacity:.78;transform:translateX(-14%)}}
+@keyframes hordeExit{0%{opacity:.9;transform:translateX(8%)}100%{opacity:0;transform:translateX(-48%)}}
 @keyframes symbolAfterHorde{0%{opacity:0;transform:translate(-50%,0) scale(.65);filter:blur(4px) drop-shadow(0 0 10px rgba(255,255,255,.5))}100%{opacity:1;transform:translate(-50%,0) scale(1);filter:blur(0) drop-shadow(0 8px 9px rgba(0,0,0,.8))}}
 @keyframes freezeNoise{50%{opacity:.2;transform:translateX(1px)}}
 @keyframes freezeBurst{0%{opacity:0;transform:translate(-50%,0) scale(.2)}20%{opacity:1;transform:translate(-50%,0) scale(1.35)}100%{opacity:0;transform:translate(-50%,0) scale(2.1)}}
 @keyframes premiumReveal{0%{opacity:0;transform:translate(-50%,0) scale(.2) rotate(-8deg)}30%{opacity:1;transform:translate(-50%,0) scale(1.28) rotate(4deg)}62%{transform:translate(-50%,0) scale(.96) rotate(0)}100%{opacity:1;transform:translate(-50%,0) scale(1)}}
 @keyframes heroIdle{50%{transform:translateY(-2px)}}
 @keyframes heroRun{50%{transform:translate(10px,-3px)}}
+@keyframes heroCrossRun{0%{transform:translateX(-8%);opacity:0}12%{opacity:1}78%{opacity:1}100%{transform:translateX(72%);opacity:0}}
 @keyframes heroAttack{0%,100%{transform:translateX(0)}50%{transform:translateX(34px) scale(1.04)}}
 @keyframes heroShoot{0%,100%{transform:translateX(0)}50%{transform:translateX(18px)}}
 @keyframes heroSpecial{0%{transform:translateX(0) scale(1)}45%{transform:translateX(52px) scale(1.1)}100%{transform:translateX(8px) scale(1)}}

@@ -407,14 +407,15 @@ function chooseHeroCostume(performanceType, role, flags={}){
  if(flags.contradiction) return weightedChoice([{value:'kimono',weight:55},{value:'nurse',weight:25},{value:'school',weight:20}]);
  if(flags.bonusExpectation) return weightedChoice([{value:'school',weight:45},{value:'nurse',weight:25},{value:'kimono',weight:30}]);
  if(flags.challengePrelude) return weightedChoice([{value:'school',weight:35},{value:'nurse',weight:25},{value:'kimono',weight:40}]);
- if(performanceType === 'item_get' || performanceType === 'ammo_event') return weightedChoice([{value:'nurse',weight:62},{value:'school',weight:30},{value:'kimono',weight:8}]);
+ if(role === 'MISS') return flags.quietBreak ? weightedChoice([{value:'school',weight:88},{value:'nurse',weight:8},{value:'kimono',weight:4}]) : 'school';
+ if(performanceType === 'item_get' || performanceType === 'ammo_event') return weightedChoice([{value:'nurse',weight:62},{value:'school',weight:34},{value:'kimono',weight:4}]);
  if(performanceType === 'shadow' || performanceType === 'warning' || performanceType === 'survive' || performanceType === 'silentContradiction') return weightedChoice([{value:'kimono',weight:64},{value:'nurse',weight:18},{value:'school',weight:18}]);
- if(performanceType === 'cherry_notice') return weightedChoice([{value:'school',weight:48},{value:'nurse',weight:34},{value:'kimono',weight:18}]);
+ if(performanceType === 'cherry_notice') return role === 'CHERRY' ? weightedChoice([{value:'school',weight:52},{value:'nurse',weight:34},{value:'kimono',weight:14}]) : weightedChoice([{value:'kimono',weight:50},{value:'school',weight:32},{value:'nurse',weight:18}]);
  if(performanceType === 'silent' && flags.roleHit) return weightedChoice([{value:'kimono',weight:42},{value:'nurse',weight:26},{value:'school',weight:32}]);
  if(['CHERRY','SUIKA','HERO'].includes(role)) return weightedChoice([{value:'school',weight:55},{value:'nurse',weight:30},{value:'kimono',weight:15}]);
- if(['REPLAY','BELL'].includes(role)) return weightedChoice([{value:'school',weight:80},{value:'nurse',weight:18},{value:'kimono',weight:2}]);
- if(flags.quietBreak) return weightedChoice([{value:'school',weight:58},{value:'nurse',weight:20},{value:'kimono',weight:22}]);
- return weightedChoice([{value:'school',weight:95},{value:'nurse',weight:5}]);
+ if(['REPLAY','BELL'].includes(role)) return ['item_get','hero_run'].includes(performanceType) ? weightedChoice([{value:'school',weight:88},{value:'nurse',weight:12}]) : 'school';
+ if(flags.quietBreak) return weightedChoice([{value:'school',weight:82},{value:'nurse',weight:12},{value:'kimono',weight:6}]);
+ return 'school';
 }
 function setHeroCostume(costume){
  if(costume === 'rush' || hero[costume]) state.heroCostume = costume;
@@ -513,6 +514,36 @@ function setHero(action, costume=state.heroCostume){
  updateHeroRuntimeDebug();
 }
 function setEnemies(action){ const loop=action!=='down'; playFrames(els.enemyA, enemySeq(state.enemyA,action), action==='walk'?5:7, 'enemyA', loop); playFrames(els.enemyB, enemySeq(state.enemyB,action), action==='walk'?4:6, 'enemyB', loop); }
+const normalSceneClasses = ['scene-idle','scene-hint','scene-combat','scene-zombie','scene-run','scene-crate'];
+function clearNormalScene(){
+ if(!els.lcdWindow) return;
+ els.lcdWindow.classList.remove(...normalSceneClasses);
+}
+function setNormalScene(scene='idle'){
+ if(!els.lcdWindow) return;
+ clearNormalScene();
+ els.lcdWindow.classList.add(`scene-${scene}`);
+}
+function setActorShown(heroShown=true, enemyAShown=false, enemyBShown=false){
+ if(els.hero) els.hero.style.visibility = heroShown ? 'visible' : 'hidden';
+ if(els.enemyA) els.enemyA.style.visibility = enemyAShown ? 'visible' : 'hidden';
+ if(els.enemyB) els.enemyB.style.visibility = enemyBShown ? 'visible' : 'hidden';
+}
+function normalSceneFor(effect){
+ if(['item','item_get','supply_check','medkit_notice','ammo_event','ammo_support'].includes(effect)) return 'crate';
+ if(['enemy_walk'].includes(effect)) return 'zombie';
+ if(['hero_run','avoid'].includes(effect)) return 'run';
+ if(['cherry_notice','punch','shoot'].includes(effect)) return 'combat';
+ if(['shadow','warning','survive','silentContradiction','silent_kimono','kimono_shadow','kimono_cut_in','kimono_turn','kimono_survive'].includes(effect)) return 'hint';
+ return 'idle';
+}
+function prizeTypeFor(effect, result={}){
+ if(result.bonus || effect === 'freeze') return 'freeze';
+ if(['enemy_walk'].includes(effect)) return 'horde';
+ if(['item','item_get','supply_check','medkit_notice','ammo_event','ammo_support'].includes(effect)) return 'crate';
+ if(['cherry_notice','punch','shoot','warning','survive'].includes(effect)) return 'drop';
+ return result.role === 'REPLAY' ? 'horde' : 'drop';
+}
 function clearBossBattle(){
  if(!els.bossBattle) return;
  els.bossBattle.className = 'boss-battle';
@@ -563,6 +594,8 @@ function setLcdMood(type, hold=900){
 }
 function setBonusLcd(type){
  if(!els.lcdWindow || !els.stageBg) return;
+ setActorShown(true, true, true);
+ clearNormalScene();
  els.lcdWindow.classList.remove('bonus-sbb','bonus-big','bonus-reg');
  els.lcdWindow.classList.add('bonus-play');
  if(type?.startsWith('SBB')) els.lcdWindow.classList.add('bonus-sbb');
@@ -658,6 +691,7 @@ function setBossFrame(frame){
 }
 function showBossBattle(boss, phase='intro'){
  if(!els.bossBattle || !boss) return;
+ setActorShown(true, true, true);
  els.bossBattle.className = `boss-battle on ${phase}`;
  if(els.lcdWindow) els.lcdWindow.classList.add('boss-mode');
  els.bossSprite.style.backgroundImage = `url("${boss.src}")`;
@@ -677,13 +711,25 @@ function startPrizeScene(type='crate'){
 }
 function revealPrizeScene(result){
  if(!els.prizeScene || !result) return;
- const type = state.presentation || 'crate';
+ const type = prizeTypeFor(state.presentation, result);
  const lineSymbol = result.grid && result.line?.rows?.length ? result.grid[1][result.line.rows[1]] : null;
  const key = result.bonus ? bonusInfo[result.bonus].center[0] : (lineSymbol || result.center?.[1] || result.center?.[0]);
  const symbol = symbolDefs[key] || symbolDefs.replay;
  if(els.prizeSymbol){
    els.prizeSymbol.src = symbol.src;
    els.prizeSymbol.alt = symbol.label;
+ }
+ if(!state.bonusActive && !state.challenge){
+   if(type === 'crate'){
+     setActorShown(true, false, false);
+     setHero(result.role === 'SUIKA' ? 'shoot' : 'melee', state.heroCostume);
+   }else if(type === 'drop'){
+     setActorShown(true, true, ['HERO'].includes(result.role));
+     setHero(result.role === 'SUIKA' ? 'shoot' : 'melee', state.heroCostume);
+     setEnemies(result.bonus ? 'down' : 'hit');
+   }else if(type === 'horde'){
+     setActorShown(false, false, false);
+   }
  }
  els.prizeScene.className = `prize-scene ${type} break${result.bonus ? ' bonus' : ''}`;
  const revealDelay = type === 'freeze' ? 620 : type === 'horde' ? 560 : type === 'drop' ? 650 : 280;
@@ -780,14 +826,19 @@ function buildOutcomeStop(roleResult){
  if(symbols) return buildLineStop(symbols, weightedPick(payLines), true);
  return buildMissStop();
 }
-function buildMissStop(){
+function leftVisibleHasRare(targetIndices){
+ if(!Number.isFinite(targetIndices?.[0])) return false;
+ return getRowsForCenter(0, targetIndices[0]).some(symbol => ['cherry','suika'].includes(symbol));
+}
+function buildMissStop(options={}){
  const keys = Object.keys(symbolDefs);
+ const avoidLeftRare = options.avoidLeftRare !== false;
  let targetIndices;
  let guard = 0;
  do{
    targetIndices = reelMap.map(arr => rand(arr.length));
    guard++;
- }while(hasWinningLine(getVisibleGrid(targetIndices)) && guard < 80);
+ }while((hasWinningLine(getVisibleGrid(targetIndices)) || (avoidLeftRare && leftVisibleHasRare(targetIndices))) && guard < 200);
  return {line:{key:'miss', label:'ハズレ', rows:[]}, targetIndices, center:targetIndices.map((idx, reelIndex)=>reelMap[reelIndex][idx]), grid:getVisibleGrid(targetIndices)};
 }
 function hasWinningLine(grid){
@@ -819,7 +870,62 @@ function actorClasses(effect){
  else if(effect==='silent_kimono'||effect==='kimono_shadow'||effect==='kimono_cut_in'||effect==='kimono_turn'||effect==='kimono_survive'){els.hero.classList.add('anim-reveal');els.enemyA.classList.add('anim-walk');els.enemyB.classList.add('anim-walk')}
  else{els.hero.classList.add('anim-idle');els.enemyA.classList.add('anim-walk');els.enemyB.classList.add('anim-walk')}
 }
+function playNormalEffect(effect,badge){
+ if(state.heroCostume === 'nurse' && effect === 'item') effect = 'supply_check';
+ if(state.heroCostume === 'nurse' && effect === 'item_get') effect = 'supply_check';
+ if(state.heroCostume === 'nurse' && effect === 'ammo_event') effect = 'ammo_support';
+ if(state.heroCostume === 'kimono' && effect === 'shadow') effect = 'kimono_shadow';
+ if(state.heroCostume === 'kimono' && effect === 'warning') effect = 'kimono_shadow';
+ if(state.heroCostume === 'kimono' && effect === 'survive') effect = 'kimono_survive';
+ const scene = normalSceneFor(effect);
+ setNormalScene(scene);
+ const showBadge = ['warning','survive'].includes(effect) ? badge : '';
+ els.lcdStatus.textContent = showBadge;
+ els.lcdStatus.classList.toggle('empty', !showBadge);
+ els.lcdStatus.classList.toggle('hot', ['warning','survive'].includes(effect));
+ els.lcdStatus.classList.toggle('bonus', false);
+ els.lcdStatus.classList.toggle('door', false);
+ setLcdMood(effect, ['warning','survive','shadow','silentContradiction','kimono_shadow','kimono_survive'].includes(effect) ? 1400 : 850);
+ actorClasses(effect);
+ if(scene === 'idle'){
+   clearPrizeScene();
+   setActorShown(true, false, false);
+   setHero('idle');
+   setEnemies('idle');
+ }else if(scene === 'hint'){
+   clearPrizeScene();
+   setActorShown(true, false, false);
+   setHero(effect.includes('kimono') ? (effect === 'kimono_survive' ? 'special' : 'idle') : 'idle', state.heroCostume);
+   setEnemies('idle');
+ }else if(scene === 'run'){
+   clearPrizeScene();
+   setActorShown(true, false, false);
+   setHero('run', state.heroCostume);
+   setEnemies('idle');
+ }else if(scene === 'zombie'){
+   startPrizeScene('horde');
+   setActorShown(false, false, false);
+   setHero('idle');
+   setEnemies('walk');
+ }else if(scene === 'crate'){
+   startPrizeScene('crate');
+   setActorShown(true, false, false);
+   setHero('idle', state.heroCostume);
+   setEnemies('idle');
+ }else if(scene === 'combat'){
+   clearPrizeScene();
+   setActorShown(true, true, ['warning','survive'].includes(effect));
+   setHero('idle', state.heroCostume);
+   setEnemies('walk');
+ }
+}
 function playEffect(effect,badge){
+ if(!state.bonusActive && !state.challenge && !['special','bonus','door'].includes(effect)){
+   playNormalEffect(effect, badge);
+   return;
+ }
+ clearNormalScene();
+ setActorShown(true, true, true);
  if(!state.bonusActive && state.heroCostume === 'nurse' && effect === 'item') effect = 'supply_check';
  if(!state.bonusActive && state.heroCostume === 'nurse' && effect === 'item_get') effect = 'supply_check';
  if(!state.bonusActive && state.heroCostume === 'nurse' && effect === 'ammo_event') effect = 'ammo_support';
@@ -876,7 +982,9 @@ function playStopPerformance(stopCount){
      setHero('idle');
      setEnemies('walk');
    }else if(perf === 'enemy_walk'){
-     setEnemies('attack');
+     startPrizeScene('horde');
+     setActorShown(false, false, false);
+     setEnemies('walk');
    }else if(perf === 'shadow' || perf === 'warning' || perf === 'survive'){
      setLcdMood('shadow', 760);
      setHero('idle');
@@ -1117,6 +1225,12 @@ function wouldCreateMissWin(reelIndex, candidateIndex){
  if(indices.some(idx => !Number.isFinite(idx))) return false;
  return hasWinningLine(getVisibleGrid(indices));
 }
+function shouldSuppressLeftRare(result){
+ return result?.line?.key === 'miss' && result?.role === 'MISS' && !isBonusExpectation(result) && !state.pendingBonus;
+}
+function leftCandidateHasRare(centerIndex){
+ return getRowsForCenter(0, centerIndex).some(symbol => ['cherry','suika'].includes(symbol));
+}
 function chooseTimedStopIndex(i){
  const arr = reelMap[i];
  const base = currentReelIndex(i);
@@ -1135,8 +1249,14 @@ function chooseTimedStopIndex(i){
  for(let slip=0; slip<=MAX_SLIP; slip++){
    const centerIndex = modIndex(base + slip, arr.length);
    const centerSymbol = getRowsForCenter(i, centerIndex)[1];
-   if(i === 0 && state.result?.line?.key === 'miss' && ['cherry','suika'].includes(centerSymbol)) continue;
+   if(i === 0 && shouldSuppressLeftRare(state.result) && (['cherry','suika'].includes(centerSymbol) || leftCandidateHasRare(centerIndex))) continue;
    if(!wouldCreateMissWin(i, centerIndex)) return centerIndex;
+ }
+ if(i === 0 && shouldSuppressLeftRare(state.result)){
+   for(let slip=MAX_SLIP + 1; slip<arr.length; slip++){
+     const centerIndex = modIndex(base + slip, arr.length);
+     if(!leftCandidateHasRare(centerIndex) && !wouldCreateMissWin(i, centerIndex)) return centerIndex;
+   }
  }
  return base;
 }
@@ -1199,6 +1319,8 @@ function startBonusChallenge(result){
  soundManager.stopReelLoop();
  soundManager.fadeOutBgm(360, 'boss');
  soundManager.playSe('bonus_chance_start');
+ setActorShown(true, true, true);
+ clearNormalScene();
  const clear = !!result.hiddenBonus;
  const boss = chooseBoss(clear);
  const pushChance = Math.min(.82, .16 + boss.expect / 120 + (clear ? .16 : 0));
@@ -1422,7 +1544,8 @@ function settle(){
  if(state.presentation === 'warning') soundManager.playSe('warning');
  if(state.presentation === 'survive') soundManager.playSe('survive');
  if(contradiction) setLcdMood('silentContradiction', 1200);
- if(shouldRevealPrize(r) && (!getRoleSymbols(r.role) || roleHit) && !contradiction){
+ const prizeShown = shouldRevealPrize(r) && (!getRoleSymbols(r.role) || roleHit) && !contradiction;
+ if(prizeShown){
    revealPrizeScene(r);
  }else{
    clearPrizeScene();
@@ -1432,8 +1555,8 @@ function settle(){
      actorClasses('shadow');
      setHero('idle');
      setEnemies('idle');
-   }else{
-     playEffect('reveal', '');
+   }else if(!prizeShown){
+     playEffect('idle', '');
    }
  }
  if(r.bonusReady){
