@@ -141,8 +141,17 @@ body:before{
 .lcd-window.scene-zombie .hero{
   opacity:0;
 }
+.lcd-window.scene-zombie .enemy{
+  opacity:.9;
+  animation:zombieCross 1.05s linear both;
+}
+.lcd-window.scene-zombie .enemy-a{right:-18%}
+.lcd-window.scene-zombie .enemy-b{
+  right:-4%;
+  animation-delay:.14s;
+}
 .lcd-window.scene-run .hero.anim-run{
-  animation:heroCrossRun .78s linear both;
+  animation:heroCrossRun 1.02s linear both;
 }
 .lcd-window.scene-combat .enemy-a{
   opacity:.98;
@@ -169,6 +178,33 @@ body:before{
 .boss-battle.on{
   opacity:1;
 }
+.boss-battle.on:before{
+  content:"BONUS CHANCE";
+  position:absolute;
+  left:50%;
+  top:6%;
+  transform:translateX(-50%);
+  z-index:3;
+  padding:6px 18px;
+  border:1px solid rgba(255,255,255,.22);
+  border-radius:10px;
+  background:linear-gradient(180deg,rgba(120,0,0,.92),rgba(0,0,0,.86));
+  color:#fff;
+  font-weight:1000;
+  font-size:clamp(17px,3vw,30px);
+  letter-spacing:.08em;
+  text-shadow:0 2px 4px #000,0 0 12px rgba(255,0,0,.8);
+}
+.boss-battle.hot:after,
+.boss-battle.mid:after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  opacity:.28;
+  background:repeating-linear-gradient(0deg,rgba(255,0,0,.35) 0 2px,transparent 2px 7px);
+  animation:bossNoise .28s steps(2) infinite;
+}
 .boss-sprite{
   position:absolute;
   right:5%;
@@ -186,7 +222,7 @@ body:before{
 .boss-battle.hit .boss-sprite{animation:bossHit .42s ease-out both}
 .boss-battle.down .boss-sprite{animation:bossDown .58s ease-out forwards}
 .boss-rate{
-  display:none;
+  display:block;
   position:absolute;
   left:4%;
   top:8%;
@@ -199,6 +235,11 @@ body:before{
   font-weight:1000;
   letter-spacing:.08em;
   text-shadow:0 2px 3px #000;
+}
+.boss-battle.hot .boss-rate{
+  border-color:rgba(255,80,80,.7);
+  background:rgba(90,0,0,.78);
+  animation:pulse .45s steps(2) infinite;
 }
 .lcd-status{
   display:none !important;
@@ -884,6 +925,7 @@ body:before{
 @keyframes bossAttack{50%{transform:scaleX(-1) translateX(-20px) scale(1.04)}}
 @keyframes bossHit{50%{transform:scaleX(-1) translateX(20px) rotate(-4deg);filter:drop-shadow(0 8px 9px rgba(0,0,0,.88)) brightness(1.45)}}
 @keyframes bossDown{to{transform:scaleX(-1) translateY(16px) rotate(9deg);opacity:.42}}
+@keyframes bossNoise{50%{opacity:.12;filter:contrast(1.8)}}
 @keyframes flashRed{50%{opacity:.1}}
 @keyframes stageShift{0%{opacity:0}18%{opacity:1;filter:contrast(1.8)}62%{opacity:.85}100%{opacity:0}}
 @keyframes bonusConfirmPulse{50%{filter:brightness(1.35)}}
@@ -900,7 +942,8 @@ body:before{
 @keyframes premiumReveal{0%{opacity:0;transform:translate(-50%,0) scale(.2) rotate(-8deg)}30%{opacity:1;transform:translate(-50%,0) scale(1.28) rotate(4deg)}62%{transform:translate(-50%,0) scale(.96) rotate(0)}100%{opacity:1;transform:translate(-50%,0) scale(1)}}
 @keyframes heroIdle{50%{transform:translateY(-2px)}}
 @keyframes heroRun{50%{transform:translate(10px,-3px)}}
-@keyframes heroCrossRun{0%{transform:translateX(-8%);opacity:0}12%{opacity:1}78%{opacity:1}100%{transform:translateX(72%);opacity:0}}
+@keyframes heroCrossRun{0%{transform:translateX(-8%);opacity:0}10%{opacity:1}86%{opacity:1}100%{transform:translateX(118%);opacity:0}}
+@keyframes zombieCross{0%{transform:scaleX(-1) translateX(0);opacity:0}8%{opacity:.9}86%{opacity:.9}100%{transform:scaleX(-1) translateX(-210%);opacity:0}}
 @keyframes heroAttack{0%,100%{transform:translateX(0)}50%{transform:translateX(34px) scale(1.04)}}
 @keyframes heroShoot{0%,100%{transform:translateX(0)}50%{transform:translateX(18px)}}
 @keyframes heroSpecial{0%{transform:translateX(0) scale(1)}45%{transform:translateX(52px) scale(1.1)}100%{transform:translateX(8px) scale(1)}}

@@ -119,7 +119,7 @@ const state = {
   credit:50, bet:0, pay:0, diff:0, games:0, big:0, reg:0, sbb:0, bell:0, spinning:false,
   stopped:[true,true,true], result:null, center:['blue7','bell','cherry'], history:[], stage:0,
   enemyA:'highschool_girl', enemyB:'salaryman', pendingBonus:null, bonusReady:false, setting:1, door:0, doorHits:0,
-  presentation:'idle', heroCostume:'school', heroAction:'idle', heroFrameIndex:0, heroFrameTotal:1, heroFramePath:'assets/sprites/hero/school/00.png', heroLoadStatus:'OK',
+  presentation:'idle', currentSceneCategory:'idle', currentDropSymbol:'-', currentEnemyAction:'idle', currentBossPhase:'-', currentBossAction:'-', heroCostume:'school', heroAction:'idle', heroFrameIndex:0, heroFrameTotal:1, heroFramePath:'assets/sprites/hero/school/00.png', heroLoadStatus:'OK',
   quietGames:0, contradiction:false, settling:false, performancePhase:0, awaitingPushNotice:null, nextGameNotice:null,
   challenge:null, bonusActive:null, reelBases:[0,0,0], stopIndices:[0,0,0], spinStartedAt:0, longFreeze:false, forceLongFreeze:false
 };
@@ -162,6 +162,16 @@ const soundManager = (() => {
    bonus_chance_lose:[110,.25,'sawtooth',.5], revive:[720,.42,'triangle',.86], freeze:[55,.8,'sawtooth',.8],
    hit:[140,.1,'sawtooth',.58], attack:[260,.08,'square',.58], shoot:[1250,.055,'square',.64], bat_attack:[300,.075,'square',.62]
  };
+ const seMap = {
+   bet:'bet', lever:'lever', stop1:'stop', stop2:'stop', stop3:'stop',
+   payout:'item', rare:'stage_change', warning:'stage_change', survive:'stage_change',
+   push_notice:'stage_change', push:'lever', bonus_confirm:'bonus_confirm', bonus_confirm2:'bonus_confirm2',
+   bonus_start:'stage_change', bonus_chance_start:'stage_change', bonus_chance_win:'bonus_confirm',
+   bonus_chance_lose:'moan', revive:'bonus_confirm2', freeze:'freeze', hit:'hit',
+   attack:'hit', shoot:'shoot', bat_attack:'hit', run:'run', zombie_walk:'moan',
+   zombie_die:'zombie_die', item:'item', stage_change:'stage_change', moan:'moan', stop:'stop'
+ };
+ const disabledSe = new Set(['reel_start','reel_loop']);
  const data = {
    unlocked:false,
    muted:localStorage.getItem('dieYetSoundMuted') === '1',
@@ -173,8 +183,13 @@ const soundManager = (() => {
    bgm:{},
    ctx:null,
    reelLoop:null,
+   reelLoopDisabled:true,
    fadeTimer:null,
-   duckTimer:null
+   duckTimer:null,
+   seCache:{},
+   lastSe:'-',
+   lastSeMode:'-',
+   bonusConfirmBusy:false
  };
  Object.entries(bgmPaths).forEach(([name, src]) => {
    const audio = new Audio(src);
@@ -284,24 +299,59 @@ const soundManager = (() => {
    osc.start(now);
    osc.stop(now + duration + .03);
  }
+ function seAudio(key){
+   if(data.seCache[key]) return data.seCache[key];
+   const audio = new Audio(`assets/audio/se/${key}.mp3`);
+   audio.preload = 'auto';
+   audio.addEventListener('error', () => console.warn(`[sound] SE load failed, fallback: assets/audio/se/${key}.mp3`));
+   data.seCache[key] = audio;
+   return audio;
+ }
+ function playFileSe(key, onEnded=null){
+   const base = seAudio(key);
+   const audio = base.cloneNode();
+   audio.volume = effectiveVolume('se');
+   audio.onended = onEnded;
+   audio.play().then(() => {
+     data.lastSe = key;
+     data.lastSeMode = `file: assets/audio/se/${key}.mp3`;
+     updateUi();
+   }).catch(e => {
+     console.warn(`[sound] SE play failed, fallback: ${key}`, e);
+     data.lastSe = key;
+     data.lastSeMode = 'fallback';
+     const t = seTones[key] || seTones.push;
+     tone(t[0], t[1], t[2], t[3]);
+     updateUi();
+   });
+ }
+ function playBonusConfirm(){
+   if(data.bonusConfirmBusy) return;
+   data.bonusConfirmBusy = true;
+   playFileSe('bonus_confirm', () => {
+     playFileSe('bonus_confirm2', () => { data.bonusConfirmBusy = false; updateUi(); });
+   });
+   setTimeout(() => { data.bonusConfirmBusy = false; updateUi(); }, 4500);
+ }
  function playSe(name){
+   const mapped = seMap[name] || name;
+   data.lastSe = `${name} -> ${mapped}`;
+   if(disabledSe.has(name) || disabledSe.has(mapped)){
+     data.lastSeMode = 'disabled';
+     updateUi();
+     return;
+   }
    if(!data.unlocked || data.muted) return;
-   const t = seTones[name] || seTones.push;
-   tone(t[0], t[1], t[2], t[3]);
-   if(name === 'bonus_confirm'){ tone(t[0] * 1.25, .28, t[2], t[3] * .75, .16); tone(t[0] * 1.5, .22, 'sine', t[3] * .55, .34); }
-   if(name === 'rare' || name === 'survive'){ tone(t[0] * .5, t[1] * .85, 'sawtooth', t[3] * .45, .04); }
+   if(mapped === 'bonus_confirm'){
+     playBonusConfirm();
+     return;
+   }
+   playFileSe(mapped);
  }
  function startReelLoop(){
-   const c = ctx();
-   if(!c || data.reelLoop || !data.unlocked || data.muted) return;
-   const osc = c.createOscillator();
-   const gain = c.createGain();
-   osc.type = 'sawtooth';
-   osc.frequency.value = 96;
-   gain.gain.value = effectiveVolume('se') * .25;
-   osc.connect(gain).connect(c.destination);
-   osc.start();
-   data.reelLoop = {osc, gain};
+   data.reelLoop = null;
+   data.lastSe = 'reel_loop';
+   data.lastSeMode = 'disabled';
    updateUi();
  }
  function stopReelLoop(){
@@ -338,7 +388,7 @@ const soundManager = (() => {
    else switchBgm('normal', true);
  }
  function getState(){
-   return {currentBgmName:data.currentBgmName || '-', desiredBgm:data.desiredBgm || '-', muted:data.muted, volume:data.volume, unlocked:data.unlocked, reelLoop:!!data.reelLoop};
+   return {currentBgmName:data.currentBgmName || '-', desiredBgm:data.desiredBgm || '-', muted:data.muted, volume:data.volume, unlocked:data.unlocked, reelLoop:'disabled', lastSe:data.lastSe, lastSeMode:data.lastSeMode};
  }
  return {unlockAudio, playBgm, stopBgm, fadeOutBgm, switchBgm, playSe, setMuted, setVolume, startReelLoop, stopReelLoop, duck, ensureContextualBgm, getState};
 })();
@@ -404,17 +454,17 @@ function setHeroFrameDebug(frames, index){
 }
 function chooseHeroCostume(performanceType, role, flags={}){
  if(flags.sbb) return 'rush';
- if(flags.contradiction) return weightedChoice([{value:'kimono',weight:55},{value:'nurse',weight:25},{value:'school',weight:20}]);
- if(flags.bonusExpectation) return weightedChoice([{value:'school',weight:45},{value:'nurse',weight:25},{value:'kimono',weight:30}]);
- if(flags.challengePrelude) return weightedChoice([{value:'school',weight:35},{value:'nurse',weight:25},{value:'kimono',weight:40}]);
- if(role === 'MISS') return flags.quietBreak ? weightedChoice([{value:'school',weight:88},{value:'nurse',weight:8},{value:'kimono',weight:4}]) : 'school';
+ if(flags.contradiction) return weightedChoice([{value:'school',weight:25},{value:'nurse',weight:25},{value:'kimono',weight:50}]);
+ if(flags.bonusExpectation) return weightedChoice([{value:'school',weight:50},{value:'nurse',weight:25},{value:'kimono',weight:25}]);
+ if(flags.challengePrelude) return weightedChoice([{value:'school',weight:45},{value:'nurse',weight:25},{value:'kimono',weight:30}]);
+ if(role === 'MISS') return weightedChoice([{value:'school',weight:99},{value:'nurse',weight:1}]);
  if(performanceType === 'item_get' || performanceType === 'ammo_event') return weightedChoice([{value:'nurse',weight:62},{value:'school',weight:34},{value:'kimono',weight:4}]);
  if(performanceType === 'shadow' || performanceType === 'warning' || performanceType === 'survive' || performanceType === 'silentContradiction') return weightedChoice([{value:'kimono',weight:64},{value:'nurse',weight:18},{value:'school',weight:18}]);
  if(performanceType === 'cherry_notice') return role === 'CHERRY' ? weightedChoice([{value:'school',weight:52},{value:'nurse',weight:34},{value:'kimono',weight:14}]) : weightedChoice([{value:'kimono',weight:50},{value:'school',weight:32},{value:'nurse',weight:18}]);
  if(performanceType === 'silent' && flags.roleHit) return weightedChoice([{value:'kimono',weight:42},{value:'nurse',weight:26},{value:'school',weight:32}]);
- if(['CHERRY','SUIKA','HERO'].includes(role)) return weightedChoice([{value:'school',weight:55},{value:'nurse',weight:30},{value:'kimono',weight:15}]);
- if(['REPLAY','BELL'].includes(role)) return ['item_get','hero_run'].includes(performanceType) ? weightedChoice([{value:'school',weight:88},{value:'nurse',weight:12}]) : 'school';
- if(flags.quietBreak) return weightedChoice([{value:'school',weight:82},{value:'nurse',weight:12},{value:'kimono',weight:6}]);
+ if(['CHERRY','SUIKA','HERO'].includes(role)) return weightedChoice([{value:'school',weight:65},{value:'nurse',weight:25},{value:'kimono',weight:10}]);
+ if(['REPLAY','BELL'].includes(role)) return weightedChoice([{value:'school',weight:92},{value:'nurse',weight:8}]);
+ if(flags.quietBreak) return weightedChoice([{value:'school',weight:94},{value:'nurse',weight:5},{value:'kimono',weight:1}]);
  return 'school';
 }
 function setHeroCostume(costume){
@@ -426,10 +476,10 @@ function heroFrames(action, costume=state.heroCostume){
 }
 function enemySeq(name, action){
  const f = enemyFrames[name] || enemyFrames.highschool_girl;
- if(action==='walk') return [f[0],f[1],f[2],f[3],f[4]].filter(Boolean);
- if(action==='attack') return [f[3],f[4],f[5],f[4]].filter(Boolean);
- if(action==='hit') return [f[5],f[6],f[5]].filter(Boolean);
- if(action==='down') return [f[5],f[6],f[7]].filter(Boolean);
+ if(action==='walk' || action==='run') return [f[1],f[2],f[3],f[2]].filter(Boolean);
+ if(action==='attack') return [f[4],f[5],f[4]].filter(Boolean);
+ if(action==='hit') return [f[6]].filter(Boolean);
+ if(action==='down') return [f[7]].filter(Boolean);
  return [f[0]];
 }
 
@@ -513,7 +563,16 @@ function setHero(action, costume=state.heroCostume){
  playFrames(els.hero, heroFrames(action, resolvedCostume), heroActionFps(action), 'hero', true);
  updateHeroRuntimeDebug();
 }
-function setEnemies(action){ const loop=action!=='down'; playFrames(els.enemyA, enemySeq(state.enemyA,action), action==='walk'?5:7, 'enemyA', loop); playFrames(els.enemyB, enemySeq(state.enemyB,action), action==='walk'?4:6, 'enemyB', loop); }
+function setHeroOnce(action, costume=state.heroCostume, next='idle', delay=520){
+ const resolvedCostume = resolveHeroCostume(costume);
+ state.heroCostume = resolvedCostume;
+ state.heroAction = normalizeHeroAction(action);
+ playFrames(els.hero, heroFrames(action, resolvedCostume), heroActionFps(action), 'hero', false);
+ clearTimer('heroOnce');
+ timers.heroOnce = setTimeout(() => setHero(next, resolvedCostume), delay);
+ updateHeroRuntimeDebug();
+}
+function setEnemies(action){ state.currentEnemyAction = action; const loop=action!=='down'; playFrames(els.enemyA, enemySeq(state.enemyA,action), action==='walk'?5:7, 'enemyA', loop); playFrames(els.enemyB, enemySeq(state.enemyB,action), action==='walk'?4:6, 'enemyB', loop); }
 const normalSceneClasses = ['scene-idle','scene-hint','scene-combat','scene-zombie','scene-run','scene-crate'];
 function clearNormalScene(){
  if(!els.lcdWindow) return;
@@ -523,6 +582,7 @@ function setNormalScene(scene='idle'){
  if(!els.lcdWindow) return;
  clearNormalScene();
  els.lcdWindow.classList.add(`scene-${scene}`);
+ state.currentSceneCategory = scene;
 }
 function setActorShown(heroShown=true, enemyAShown=false, enemyBShown=false){
  if(els.hero) els.hero.style.visibility = heroShown ? 'visible' : 'hidden';
@@ -547,6 +607,9 @@ function prizeTypeFor(effect, result={}){
 function clearBossBattle(){
  if(!els.bossBattle) return;
  els.bossBattle.className = 'boss-battle';
+ state.currentBossPhase = '-';
+ state.currentBossAction = '-';
+ clearAnim('boss');
  clearTimer('challenge');
  if(els.lcdWindow) els.lcdWindow.classList.remove('boss-mode');
  if(els.bossSprite){
@@ -686,22 +749,72 @@ function chooseBoss(clear){
 }
 function setBossFrame(frame){
  if(!els.bossSprite) return;
+ els.bossSprite.style.backgroundSize = '800% 100%';
  const pos = Math.max(0, Math.min(7, frame)) * 100 / 7;
  els.bossSprite.style.backgroundPosition = `${pos}% 0`;
+}
+function bossFramePath(boss, frame){
+ const dir = boss.dir || boss.key;
+ return `assets/sprites/bosses/${dir}/${String(frame).padStart(2,'0')}.png`;
+}
+function bossFrames(boss, action){
+ if(action === 'run') return [1,2,3,2].map(i => bossFramePath(boss, i));
+ if(action === 'attack') return [4,5,4].map(i => bossFramePath(boss, i));
+ if(action === 'hit') return [6].map(i => bossFramePath(boss, i));
+ if(action === 'down') return [7].map(i => bossFramePath(boss, i));
+ return [0].map(i => bossFramePath(boss, i));
+}
+function fallbackBossSheet(boss, phase){
+ if(!els.bossSprite) return;
+ els.bossSprite.style.backgroundImage = `url("${boss.src}")`;
+ els.bossSprite.style.backgroundRepeat = 'no-repeat';
+ els.bossSprite.style.backgroundSize = '800% 100%';
+ const frame = phase === 'attack' ? 5 : phase === 'hit' ? 6 : phase === 'down' ? 7 : 1;
+ setBossFrame(frame);
+}
+function playBossFrames(boss, action, phase){
+ clearAnim('boss');
+ const frames = bossFrames(boss, action);
+ state.currentBossAction = action;
+ let checked = false;
+ const test = new Image();
+ test.onload = () => {
+   checked = true;
+   els.bossSprite.style.backgroundRepeat = 'no-repeat';
+   els.bossSprite.style.backgroundSize = 'contain';
+   els.bossSprite.style.backgroundPosition = 'center bottom';
+   let i = 0;
+   els.bossSprite.style.backgroundImage = `url("${frames[0]}")`;
+   if(frames.length > 1){
+     timers.boss = setInterval(() => {
+       i = (i + 1) % frames.length;
+       els.bossSprite.style.backgroundImage = `url("${frames[i]}")`;
+     }, action === 'run' ? 120 : 150);
+   }
+ };
+ test.onerror = () => {
+   if(!checked) fallbackBossSheet(boss, phase);
+ };
+ test.src = frames[0];
 }
 function showBossBattle(boss, phase='intro'){
  if(!els.bossBattle || !boss) return;
  setActorShown(true, true, true);
- els.bossBattle.className = `boss-battle on ${phase}`;
+ state.currentBossPhase = phase;
+ const tier = boss.expect >= 75 ? 'hot' : boss.expect >= 55 ? 'mid' : 'low';
+ els.bossBattle.className = `boss-battle on ${phase} ${tier}`;
  if(els.lcdWindow) els.lcdWindow.classList.add('boss-mode');
- els.bossSprite.style.backgroundImage = `url("${boss.src}")`;
  if(els.bossRate) els.bossRate.textContent = `${boss.label} ${boss.expect}%`;
- const frame = phase === 'attack' ? 5 : phase === 'hit' ? 6 : phase === 'down' ? 7 : 1;
- setBossFrame(frame);
+ const action = phase === 'attack' ? 'attack' : phase === 'hit' ? 'hit' : phase === 'down' ? 'down' : phase === 'intro' ? 'run' : 'idle';
+ if(phase === 'intro'){ soundManager.playSe('moan'); soundManager.playSe('stage_change'); }
+ if(phase === 'hit') soundManager.playSe('hit');
+ if(phase === 'down') soundManager.playSe('zombie_die');
+ playBossFrames(boss, action, phase);
 }
 function clearPrizeScene(){
  if(!els.prizeScene) return;
  els.prizeScene.className = 'prize-scene';
+ state.currentDropSymbol = '-';
  if(els.prizeSymbol) els.prizeSymbol.removeAttribute('src');
 }
 function startPrizeScene(type='crate'){
@@ -715,6 +828,7 @@ function revealPrizeScene(result){
  const lineSymbol = result.grid && result.line?.rows?.length ? result.grid[1][result.line.rows[1]] : null;
  const key = result.bonus ? bonusInfo[result.bonus].center[0] : (lineSymbol || result.center?.[1] || result.center?.[0]);
  const symbol = symbolDefs[key] || symbolDefs.replay;
+ state.currentDropSymbol = key || '-';
  if(els.prizeSymbol){
    els.prizeSymbol.src = symbol.src;
    els.prizeSymbol.alt = symbol.label;
@@ -722,13 +836,20 @@ function revealPrizeScene(result){
  if(!state.bonusActive && !state.challenge){
    if(type === 'crate'){
      setActorShown(true, false, false);
-     setHero(result.role === 'SUIKA' ? 'shoot' : 'melee', state.heroCostume);
+     soundManager.playSe(result.role === 'SUIKA' ? 'shoot' : 'hit');
+     setHeroOnce(result.role === 'SUIKA' ? 'shoot' : 'melee', state.heroCostume, 'idle', 520);
+     setTimeout(()=>soundManager.playSe('item'), 260);
    }else if(type === 'drop'){
      setActorShown(true, true, ['HERO'].includes(result.role));
-     setHero(result.role === 'SUIKA' ? 'shoot' : 'melee', state.heroCostume);
-     setEnemies(result.bonus ? 'down' : 'hit');
+     soundManager.playSe(result.role === 'SUIKA' ? 'shoot' : 'hit');
+     setHeroOnce(result.role === 'SUIKA' ? 'shoot' : 'melee', state.heroCostume, 'idle', 520);
+     setEnemies('hit');
+     setTimeout(()=>{ setEnemies('down'); soundManager.playSe('zombie_die'); }, 340);
+     setTimeout(()=>soundManager.playSe('item'), 560);
    }else if(type === 'horde'){
      setActorShown(false, false, false);
+     soundManager.playSe('zombie_walk');
+     setTimeout(()=>soundManager.playSe('item'), 520);
    }
  }
  els.prizeScene.className = `prize-scene ${type} break${result.bonus ? ' bonus' : ''}`;
@@ -895,17 +1016,25 @@ function playNormalEffect(effect,badge){
  }else if(scene === 'hint'){
    clearPrizeScene();
    setActorShown(true, false, false);
+   if(['warning','survive','kimono_shadow','kimono_survive','silentContradiction'].includes(effect)) soundManager.playSe('stage_change');
    setHero(effect.includes('kimono') ? (effect === 'kimono_survive' ? 'special' : 'idle') : 'idle', state.heroCostume);
    setEnemies('idle');
  }else if(scene === 'run'){
    clearPrizeScene();
    setActorShown(true, false, false);
+   soundManager.playSe('run');
    setHero('run', state.heroCostume);
    setEnemies('idle');
+   clearTimer('normalRun');
+   timers.normalRun = setTimeout(() => {
+     if(state.currentSceneCategory === 'run' && !state.spinning && !state.settling) playEffect('idle','');
+     else if(state.currentSceneCategory === 'run') setHero('idle', state.heroCostume);
+   }, 820);
  }else if(scene === 'zombie'){
    startPrizeScene('horde');
-   setActorShown(false, false, false);
+   setActorShown(false, true, ['SUIKA','CHERRY','HERO'].includes(state.result?.role) || isBonusExpectation(state.result));
    setHero('idle');
+   soundManager.playSe('zombie_walk');
    setEnemies('walk');
  }else if(scene === 'crate'){
    startPrizeScene('crate');
@@ -915,6 +1044,7 @@ function playNormalEffect(effect,badge){
  }else if(scene === 'combat'){
    clearPrizeScene();
    setActorShown(true, true, ['warning','survive'].includes(effect));
+   soundManager.playSe('moan');
    setHero('idle', state.heroCostume);
    setEnemies('walk');
  }
@@ -1072,8 +1202,6 @@ function leverOn(){
  if(!state.bonusActive && state.bet<3)return;
  soundManager.ensureContextualBgm();
  soundManager.playSe('lever');
- soundManager.playSe('reel_start');
- soundManager.startReelLoop();
  clearPrizeScene();
  clearBossBattle();
  if(!state.pendingBonus) clearBonusConfirm();
@@ -1646,7 +1774,7 @@ function update(){
  updateHeroRuntimeDebug();
  updateSoundDebug();
 }
-function reset(){ soundManager.stopReelLoop(); soundManager.fadeOutBgm(240, 'normal'); Object.assign(state,{credit:50,bet:0,pay:0,diff:0,games:0,big:0,reg:0,sbb:0,bell:0,spinning:false,stopped:[true,true,true],result:null,center:['blue7','bell','cherry'],history:[],stage:0,pendingBonus:null,bonusReady:false,door:0,doorHits:0,presentation:'idle',heroCostume:'school',heroAction:'idle',heroFrameIndex:0,heroFrameTotal:1,heroFramePath:'assets/sprites/hero/school/00.png',heroLoadStatus:'OK',quietGames:0,contradiction:false,settling:false,performancePhase:0,awaitingPushNotice:null,nextGameNotice:null,challenge:null,bonusActive:null,reelBases:[0,0,0],stopIndices:[0,0,0],spinStartedAt:0,longFreeze:false,forceLongFreeze:false}); clearPrizeScene(); clearBossBattle(); clearBonusConfirm(); clearLongFreeze(); clearBonusLcd(); clearLcdMood(); randomizeActors(); setStage(0); playEffect('idle',''); setCenter(state.center); update(); }
+function reset(){ soundManager.stopReelLoop(); soundManager.fadeOutBgm(240, 'normal'); Object.assign(state,{credit:50,bet:0,pay:0,diff:0,games:0,big:0,reg:0,sbb:0,bell:0,spinning:false,stopped:[true,true,true],result:null,center:['blue7','bell','cherry'],history:[],stage:0,pendingBonus:null,bonusReady:false,door:0,doorHits:0,presentation:'idle',currentSceneCategory:'idle',currentDropSymbol:'-',currentEnemyAction:'idle',currentBossPhase:'-',currentBossAction:'-',heroCostume:'school',heroAction:'idle',heroFrameIndex:0,heroFrameTotal:1,heroFramePath:'assets/sprites/hero/school/00.png',heroLoadStatus:'OK',quietGames:0,contradiction:false,settling:false,performancePhase:0,awaitingPushNotice:null,nextGameNotice:null,challenge:null,bonusActive:null,reelBases:[0,0,0],stopIndices:[0,0,0],spinStartedAt:0,longFreeze:false,forceLongFreeze:false}); clearPrizeScene(); clearBossBattle(); clearBonusConfirm(); clearLongFreeze(); clearBonusLcd(); clearLcdMood(); randomizeActors(); setStage(0); playEffect('idle',''); setCenter(state.center); update(); }
 function rand(n){return Math.floor(Math.random()*n)}
 function heroDebugFrames(){
  return heroFramePaths(heroDebugState.action, heroDebugState.costume);
@@ -1721,14 +1849,24 @@ function updateHeroRuntimeDebug(){
  const boss = state.challenge?.boss?.label || '-';
  const bonusHint = !!(state.result?.bonus || state.result?.bonusReady || state.result?.hiddenBonus || state.pendingBonus || state.awaitingPushNotice || state.nextGameNotice);
  info.innerHTML = [
+   ['currentSceneCategory', state.currentSceneCategory || '-'],
    ['currentHeroCostume', state.heroCostume],
    ['currentHeroAction', state.heroAction],
    ['currentPerformanceType', state.presentation || '-'],
+   ['currentEnemyType', `${state.enemyA || '-'} / ${state.enemyB || '-'}`],
+   ['currentEnemyAction', state.currentEnemyAction || '-'],
+   ['currentDropSymbol', state.currentDropSymbol || '-'],
+   ['isZombieWalkVisible', String(state.currentSceneCategory === 'zombie')],
+   ['isCrateVisible', String(state.currentSceneCategory === 'crate')],
    ['currentRole', role],
    ['isContradiction', String(!!state.contradiction)],
    ['isBonusHint', String(bonusHint)],
    ['isBonusChance', String(!!state.challenge)],
    ['currentBossName', boss],
+   ['currentBossPhase', state.currentBossPhase || '-'],
+   ['currentBossAction', state.currentBossAction || '-'],
+   ['isPushActive', String(!!state.challenge?.awaitingPush || !!state.awaitingPushNotice)],
+   ['reviveCandidate', String(!!state.challenge?.revive)],
    ['liveFrame', `${(state.heroFrameIndex || 0) + 1} / ${state.heroFrameTotal || 1}`],
    ['livePath', state.heroFramePath || '-'],
    ['liveLoad', state.heroLoadStatus || '-']
@@ -1766,7 +1904,12 @@ function updateSoundDebug(){
    ['muted', String(s.muted)],
    ['volume', s.volume.toFixed(2)],
    ['audioUnlocked', String(s.unlocked)],
-   ['reelLoop', String(s.reelLoop)]
+   ['reel_loop', 'disabled'],
+   ['reel_start', 'disabled'],
+   ['stopMapping', 'stop1/stop2/stop3 -> stop.mp3'],
+   ['bonusConfirm', 'bonus_confirm.mp3 -> bonus_confirm2.mp3'],
+   ['lastSe', s.lastSe || '-'],
+   ['lastSeMode', s.lastSeMode || '-']
  ].map(([k,v])=>`<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
 }
 function initSoundDebugPanel(){
@@ -1808,7 +1951,7 @@ function renderDebugTools(){
    <h3>BGM</h3>
    <div class="sound-debug-grid"><button type="button" data-bgm-test="normal">normal.mp3</button><button type="button" data-bgm-test="boss">boss.mp3</button><button type="button" data-bgm-test="rush">rush.mp3</button><button id="soundDebugStopBgm" type="button">STOP BGM</button><button id="soundDebugFadeBgm" type="button">FADE OUT</button><button id="soundDebugToggle" type="button">SOUND ON/OFF</button></div>
    <h3>SE</h3>
-   <div class="sound-debug-grid">${['bet','lever','reel_start','stop1','stop2','stop3','payout','rare','warning','survive','push_notice','push','bonus_confirm','bonus_start','bonus_chance_start','bonus_chance_win','bonus_chance_lose','revive','freeze','hit','attack','shoot','bat_attack'].map(name=>`<button type="button" data-se-test="${name}">${name}</button>`).join('')}</div>
+   <div class="sound-debug-grid">${['bet','bonus_confirm','bonus_confirm2','freeze','hit','item','lever','moan','run','shoot','stage_change','stop','zombie_die','stop1','stop2','stop3','reel_start','reel_loop'].map(name=>`<button type="button" data-se-test="${name}">${name}</button>`).join('')}</div>
    <h3>Status</h3>
    <dl id="soundDebugInfo" class="hero-debug-info"></dl>
  </section>`);
