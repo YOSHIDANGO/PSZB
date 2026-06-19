@@ -555,7 +555,7 @@ function heroFramePaths(action='idle', costume=state.heroCostume){
  if(action === 'special') return [b[1],b[2],b[3],b[5],b[6],b[7],b[8],b[9]].filter(Boolean);
  if(normalized === 'idle') return [b[0]].filter(Boolean);
  if(normalized === 'run') return [b[1],b[2],b[3],b[4],b[3],b[2]].filter(Boolean);
- if(normalized === 'bat_attack') return [b[5],b[6],b[5],b[0]].filter(Boolean);
+ if(normalized === 'bat_attack') return [b[5],b[6]].filter(Boolean);
  if(normalized === 'shoot') return [b[7],b[8]].filter(Boolean);
  if(normalized === 'hit') return [b[9]].filter(Boolean);
  if(normalized === 'down') return [b[10]].filter(Boolean);
@@ -563,14 +563,8 @@ function heroFramePaths(action='idle', costume=state.heroCostume){
 }
 function heroActionFps(action='idle'){
  const normalized = normalizeHeroAction(action);
- if(action === 'rush') return 11;
- if(action === 'special') return 9;
- if(normalized === 'run') return 8;
- if(normalized === 'bat_attack') return 8;
- if(normalized === 'shoot') return 7;
- if(normalized === 'hit') return 7;
- if(normalized === 'down') return 3;
- return 3;
+ if(action === 'rush' || normalized === 'run') return 10;
+ return 4;
 }
 function setHeroFrameDebug(frames, index){
  state.heroFrameIndex = index;
@@ -2376,7 +2370,16 @@ function initHeroDebugPanel(){
  if(!costume || costume.dataset.ready) return;
  costume.dataset.ready = '1';
  costume.addEventListener('change', e => { heroDebugState.costume = e.target.value; heroDebugState.frame = 0; renderHeroDebugFrame(); });
- action.addEventListener('change', e => { heroDebugState.action = e.target.value; heroDebugState.frame = 0; renderHeroDebugFrame(); });
+ action.addEventListener('change', e => {
+   heroDebugState.action = e.target.value;
+   heroDebugState.fps = heroActionFps(heroDebugState.action);
+   if(fps) fps.value = String(heroDebugState.fps);
+   const out = $('#heroDebugFpsValue');
+   if(out) out.textContent = `${heroDebugState.fps} fps`;
+   heroDebugState.frame = 0;
+   renderHeroDebugFrame();
+   if(heroDebugState.playing) playHeroDebug();
+ });
  fps.addEventListener('input', e => {
    heroDebugState.fps = Number(e.target.value) || 4;
    const out = $('#heroDebugFpsValue');
