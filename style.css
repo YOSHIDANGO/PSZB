@@ -12,6 +12,13 @@ html,body{
   color:var(--ink);
   font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 }
+body.fullscreen-wanted{
+  min-height:100dvh;
+}
+body.fullscreen-wanted .app{
+  padding-top:env(safe-area-inset-top);
+  padding-bottom:env(safe-area-inset-bottom);
+}
 body:before{
   content:"";
   position:fixed;
@@ -143,15 +150,21 @@ body:before{
 }
 .lcd-window.scene-zombie .enemy{
   opacity:.9;
-  animation:zombieCross 1.05s linear both;
+  animation:zombieCross 1.45s linear both;
 }
 .lcd-window.scene-zombie .enemy-a{right:-18%}
 .lcd-window.scene-zombie .enemy-b{
   right:-4%;
   animation-delay:.14s;
 }
+.lcd-window.scene-zombie .horde-silhouette{
+  display:none;
+}
+.lcd-window.scene-zombie .prize-scene.horde.ready:before{
+  display:none;
+}
 .lcd-window.scene-run .hero.anim-run{
-  animation:heroCrossRun 1.02s linear both;
+  animation:heroCrossRun 1.28s linear both;
 }
 .lcd-window.scene-combat .enemy-a{
   opacity:.98;
@@ -942,8 +955,8 @@ body:before{
 @keyframes premiumReveal{0%{opacity:0;transform:translate(-50%,0) scale(.2) rotate(-8deg)}30%{opacity:1;transform:translate(-50%,0) scale(1.28) rotate(4deg)}62%{transform:translate(-50%,0) scale(.96) rotate(0)}100%{opacity:1;transform:translate(-50%,0) scale(1)}}
 @keyframes heroIdle{50%{transform:translateY(-2px)}}
 @keyframes heroRun{50%{transform:translate(10px,-3px)}}
-@keyframes heroCrossRun{0%{transform:translateX(-8%);opacity:0}10%{opacity:1}86%{opacity:1}100%{transform:translateX(118%);opacity:0}}
-@keyframes zombieCross{0%{transform:scaleX(-1) translateX(0);opacity:0}8%{opacity:.9}86%{opacity:.9}100%{transform:scaleX(-1) translateX(-210%);opacity:0}}
+@keyframes heroCrossRun{0%{transform:translateX(-20%);opacity:0}8%{opacity:1}88%{opacity:1}100%{transform:translateX(330%);opacity:0}}
+@keyframes zombieCross{0%{transform:scaleX(-1) translateX(0);opacity:0}8%{opacity:.9}88%{opacity:.9}100%{transform:scaleX(-1) translateX(-360%);opacity:0}}
 @keyframes heroAttack{0%,100%{transform:translateX(0)}50%{transform:translateX(34px) scale(1.04)}}
 @keyframes heroShoot{0%,100%{transform:translateX(0)}50%{transform:translateX(18px)}}
 @keyframes heroSpecial{0%{transform:translateX(0) scale(1)}45%{transform:translateX(52px) scale(1.1)}100%{transform:translateX(8px) scale(1)}}
@@ -1323,6 +1336,49 @@ body.debug-position .hit-maxbet{
 body.debug-position .lcd-window{
   outline:3px solid rgba(0,255,255,.95) !important;
 }
+
+/* mobile operation buttons: keep RESET / FREEZE / SOUND separated */
+@media(max-width:560px){
+  .reset-float{
+    right:2.2% !important;
+    top:72.8% !important;
+    bottom:auto !important;
+    width:18.5% !important;
+    min-height:44px !important;
+    font-size:16px !important;
+    z-index:12 !important;
+  }
+  .force-freeze-float{
+    left:2.2% !important;
+    right:auto !important;
+    top:72.8% !important;
+    bottom:auto !important;
+    width:18.5% !important;
+    min-height:44px !important;
+    font-size:12px !important;
+    z-index:12 !important;
+  }
+  .sound-control{
+    left:50% !important;
+    right:auto !important;
+    top:74.2% !important;
+    bottom:auto !important;
+    transform:translateX(-50%);
+    width:38% !important;
+    grid-template-columns:1fr !important;
+    gap:3px !important;
+    padding:5px 7px !important;
+    z-index:12 !important;
+  }
+  .sound-control button{
+    min-height:28px !important;
+    padding:4px 6px !important;
+    font-size:10px !important;
+  }
+  .sound-control input{
+    min-height:20px !important;
+  }
+}
 body.debug-position .reel-window{
   outline:3px solid rgba(255,255,0,.95) !important;
 }
@@ -1674,5 +1730,61 @@ body.debug-position .stop-hit{
   }
   .counter-live b{
     font-size:10px !important;
+  }
+}
+
+/* v23 mobile utility bar: place RESET / FREEZE / SOUND between cabinet and meters */
+@media(max-width:560px){
+  .cabinet-game{
+    margin-bottom:78px !important;
+    overflow:visible !important;
+  }
+  .reset-float,
+  .force-freeze-float,
+  .sound-control{
+    top:calc(100% + 10px) !important;
+    bottom:auto !important;
+    transform:none !important;
+    z-index:20 !important;
+  }
+  .force-freeze-float{
+    left:2% !important;
+    right:auto !important;
+    width:21% !important;
+    min-height:50px !important;
+    padding:6px 8px !important;
+    font-size:12px !important;
+    line-height:1.05 !important;
+  }
+  .sound-control{
+    left:27% !important;
+    right:auto !important;
+    width:46% !important;
+    min-height:50px !important;
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    gap:4px !important;
+    padding:6px 10px !important;
+    box-sizing:border-box !important;
+  }
+  .sound-control button{
+    min-height:24px !important;
+    padding:3px 6px !important;
+    font-size:10px !important;
+    border-radius:7px !important;
+  }
+  .sound-control input{
+    min-height:20px !important;
+  }
+  .reset-float{
+    left:auto !important;
+    right:2% !important;
+    width:21% !important;
+    min-height:50px !important;
+    padding:6px 8px !important;
+    font-size:16px !important;
+  }
+  .mobile-control{
+    margin-top:0 !important;
   }
 }

@@ -187,6 +187,7 @@ const soundManager = (() => {
    fadeTimer:null,
    duckTimer:null,
    seCache:{},
+   activeSe:{},
    lastSe:'-',
    lastSeMode:'-',
    bonusConfirmBusy:false
@@ -311,7 +312,12 @@ const soundManager = (() => {
    const base = seAudio(key);
    const audio = base.cloneNode();
    audio.volume = effectiveVolume('se');
-   audio.onended = onEnded;
+   if(!data.activeSe[key]) data.activeSe[key] = [];
+   data.activeSe[key].push(audio);
+   audio.onended = () => {
+     data.activeSe[key] = (data.activeSe[key] || []).filter(a => a !== audio);
+     if(onEnded) onEnded();
+   };
    audio.play().then(() => {
      data.lastSe = key;
      data.lastSeMode = `file: assets/audio/se/${key}.mp3`;
@@ -324,6 +330,17 @@ const soundManager = (() => {
      tone(t[0], t[1], t[2], t[3]);
      updateUi();
    });
+ }
+ function stopSe(name){
+   const mapped = seMap[name] || name;
+   (data.activeSe[mapped] || []).forEach(audio => {
+     try{ audio.pause(); audio.currentTime = 0; }catch(e){}
+   });
+   data.activeSe[mapped] = [];
+   updateUi();
+ }
+ function stopTransientSe(){
+   ['moan','run','shoot','hit','item','stage_change','zombie_die'].forEach(stopSe);
  }
  function playBonusConfirm(){
    if(data.bonusConfirmBusy) return;
@@ -390,7 +407,7 @@ const soundManager = (() => {
  function getState(){
    return {currentBgmName:data.currentBgmName || '-', desiredBgm:data.desiredBgm || '-', muted:data.muted, volume:data.volume, unlocked:data.unlocked, reelLoop:'disabled', lastSe:data.lastSe, lastSeMode:data.lastSeMode};
  }
- return {unlockAudio, playBgm, stopBgm, fadeOutBgm, switchBgm, playSe, setMuted, setVolume, startReelLoop, stopReelLoop, duck, ensureContextualBgm, getState};
+ return {unlockAudio, playBgm, stopBgm, fadeOutBgm, switchBgm, playSe, stopSe, stopTransientSe, setMuted, setVolume, startReelLoop, stopReelLoop, duck, ensureContextualBgm, getState};
 })();
 function playFrames(img, frames, fps=8, name='anim', loop=true){
  clearAnim(name); if(!frames?.length) return; let i=0;
@@ -493,7 +510,7 @@ function symbolImgHtml(k, alt=symbolDefs[k].label){
 }
 function buildStrip(arr){ return [...arr,...arr,...arr].map(k=>`<div class="symbol">${symbolImgHtml(k)}</div>`).join(''); }
 function bind(){
- const unlock = () => soundManager.unlockAudio();
+ const unlock = () => { soundManager.unlockAudio(); requestMobileFullscreen(); };
  document.addEventListener('pointerdown', unlock, {once:true});
  document.addEventListener('keydown', unlock, {once:true});
  $('#maxBetBtn').addEventListener('click', () => { soundManager.unlockAudio(); maxBet(); });
@@ -509,6 +526,22 @@ function bind(){
    els.settingSelect.addEventListener('change', e => { state.setting = Number(e.target.value); update(); });
  }
  soundManager.setVolume(soundManager.getState().volume);
+}
+function isSmallTouchScreen(){
+ return matchMedia('(max-width: 760px)').matches && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+}
+function requestMobileFullscreen(){
+ if(!isSmallTouchScreen()) return;
+ document.body.classList.add('fullscreen-wanted');
+ const target = document.documentElement;
+ const request = target.requestFullscreen || target.webkitRequestFullscreen || target.msRequestFullscreen;
+ if(request && !document.fullscreenElement && !document.webkitFullscreenElement){
+   try{
+     const result = request.call(target);
+     if(result?.catch) result.catch(() => {});
+   }catch(e){}
+ }
+ setTimeout(() => window.scrollTo(0, 1), 80);
 }
 function reserveLongFreeze(){
  if(state.spinning || state.challenge || state.bonusActive || state.longFreeze) return;
@@ -606,6 +639,7 @@ function prizeTypeFor(effect, result={}){
 }
 function clearBossBattle(){
  if(!els.bossBattle) return;
+ soundManager.stopTransientSe();
  els.bossBattle.className = 'boss-battle';
  state.currentBossPhase = '-';
  state.currentBossAction = '-';
@@ -799,6 +833,7 @@ function playBossFrames(boss, action, phase){
 }
 function showBossBattle(boss, phase='intro'){
  if(!els.bossBattle || !boss) return;
+ soundManager.stopTransientSe();
  setActorShown(true, true, true);
  state.currentBossPhase = phase;
  const tier = boss.expect >= 75 ? 'hot' : boss.expect >= 55 ? 'mid' : 'low';
@@ -813,6 +848,7 @@ function showBossBattle(boss, phase='intro'){
 }
 function clearPrizeScene(){
  if(!els.prizeScene) return;
+ soundManager.stopTransientSe();
  els.prizeScene.className = 'prize-scene';
  state.currentDropSymbol = '-';
  if(els.prizeSymbol) els.prizeSymbol.removeAttribute('src');
@@ -992,6 +1028,7 @@ function actorClasses(effect){
  else{els.hero.classList.add('anim-idle');els.enemyA.classList.add('anim-walk');els.enemyB.classList.add('anim-walk')}
 }
 function playNormalEffect(effect,badge){
+ soundManager.stopTransientSe();
  if(state.heroCostume === 'nurse' && effect === 'item') effect = 'supply_check';
  if(state.heroCostume === 'nurse' && effect === 'item_get') effect = 'supply_check';
  if(state.heroCostume === 'nurse' && effect === 'ammo_event') effect = 'ammo_support';
@@ -1028,8 +1065,7 @@ function playNormalEffect(effect,badge){
    clearTimer('normalRun');
    timers.normalRun = setTimeout(() => {
      if(state.currentSceneCategory === 'run' && !state.spinning && !state.settling) playEffect('idle','');
-     else if(state.currentSceneCategory === 'run') setHero('idle', state.heroCostume);
-   }, 820);
+   }, 1350);
  }else if(scene === 'zombie'){
    startPrizeScene('horde');
    setActorShown(false, true, ['SUIKA','CHERRY','HERO'].includes(state.result?.role) || isBonusExpectation(state.result));
@@ -1113,7 +1149,8 @@ function playStopPerformance(stopCount){
      setEnemies('walk');
    }else if(perf === 'enemy_walk'){
      startPrizeScene('horde');
-     setActorShown(false, false, false);
+     setActorShown(false, true, ['SUIKA','CHERRY','HERO'].includes(result.role) || isBonusExpectation(result));
+     soundManager.playSe('zombie_walk');
      setEnemies('walk');
    }else if(perf === 'shadow' || perf === 'warning' || perf === 'survive'){
      setLcdMood('shadow', 760);
@@ -1154,7 +1191,8 @@ function playStopPerformance(stopCount){
 }
 
 function maxBet(){
- if(state.spinning||state.settling||state.bet===3||state.credit<1||state.challenge||state.bonusActive||state.longFreeze)return;
+ if(state.pendingBonus && state.bonusReady && !state.bonusActive){ startBonus(); return; }
+ if(state.spinning||state.settling||state.bet===3||state.credit<1||state.bonusActive||state.longFreeze)return;
  const need=3-state.bet;
  if(state.credit<need)return;
  soundManager.playSe('bet');
@@ -1191,7 +1229,12 @@ function pushAction(){
  if(state.door>0) setLcdMood('survive', 650);
 }
 function leverOn(){
- if(state.spinning||state.settling||state.challenge||state.longFreeze)return;
+ if(state.spinning||state.settling||state.longFreeze)return;
+ if(state.pendingBonus && state.bonusReady && !state.bonusActive){ startBonus(); return; }
+ if(state.challenge && !state.bonusActive){
+   startChallengeReelGame();
+   return;
+ }
  if(state.nextGameNotice){
    soundManager.playSe('lever');
    const bonus = state.nextGameNotice;
@@ -1398,11 +1441,18 @@ function stopReel(i){
  alignReelToIndex(i,index, true);
  if(!state.stopped.every(Boolean)){
    state.performancePhase = stopCount;
-   playStopPerformance(stopCount);
+   if(state.result?.challengeGame) advanceChallengeByStop(stopCount);
+   else playStopPerformance(stopCount);
  }
  if(state.stopped.every(Boolean)){
    soundManager.stopReelLoop();
    state.settling = true;
+   if(state.result?.challengeGame){
+     advanceChallengeByStop(3);
+     setTimeout(finishChallengeReelGame, 900);
+     update();
+     return;
+   }
    const delay = settleDelay(state.result);
    const thirdContradiction = hasContradiction(state.presentation, state.result?.role, isBonusExpectation(state.result));
    if(thirdContradiction && state.heroCostume === 'kimono') setLcdMood('kimono_cut_in', delay + 360);
@@ -1463,6 +1513,7 @@ function startBonusChallenge(result){
    awaitingPush:false,
    pushed:false,
    pushPrompt:Math.random() < pushChance,
+   awaitingGame:true,
    type: result.hiddenBonus ? (Math.random() < .18 ? 'freeze' : (Math.random() < .55 ? 'horde' : 'drop')) : (Math.random() < .55 ? 'crate' : 'horde'),
    boss
  };
@@ -1473,9 +1524,38 @@ function startBonusChallenge(result){
  }));
  clearPrizeScene();
  if(els.prizeScene) els.prizeScene.className = 'prize-scene challenge';
- setLcdMood('silentContradiction', 360);
- timers.challenge = setTimeout(()=>advanceChallenge('auto'), 360);
+ showBossBattle(boss, 'intro');
+ setLcdMood('warning', 1200);
  pushHistory(`${result.role} CHANCE`, 0);
+ update();
+}
+
+function startChallengeReelGame(){
+ const c = state.challenge;
+ if(!c || state.spinning || state.settling) return;
+ if(state.bet < 3) return;
+ soundManager.ensureContextualBgm();
+ soundManager.playSe('lever');
+ clearPrizeScene();
+ clearNormalScene();
+ c.awaitingGame = false;
+ c.step = 0;
+ state.games++;
+ state.bet = 0;
+ state.pay = 0;
+ state.reelBases = reelMap.map(arr => rand(arr.length));
+ state.stopIndices = [null,null,null];
+ state.spinStartedAt = performance.now();
+ state.performancePhase = 0;
+ state.spinning = true;
+ state.stopped = [false,false,false];
+ state.result = {role:'CHANCE_GAME', chance:1, ...buildMissStop({avoidLeftRare:false}), pay:0, badge:'CHANCE', effect:'warning', challengeGame:true};
+ state.center = state.result.center;
+ state.presentation = 'warning';
+ showBossBattle(c.boss, 'intro');
+ setHero('idle', state.heroCostume);
+ setEnemies('walk');
+ els.reels.forEach((_,i)=>spinVisual(i));
  update();
 }
 
@@ -1484,6 +1564,7 @@ function challengeDelay(c, base){
 }
 function finishChallengeSuccess(c, label='CHANCE CLEAR'){
  const bonus = c.bonus || chooseBonusType();
+ soundManager.stopTransientSe();
  soundManager.playSe('bonus_chance_win');
  soundManager.fadeOutBgm(420);
  showBossBattle(c.boss, 'down');
@@ -1498,6 +1579,7 @@ function finishChallengeSuccess(c, label='CHANCE CLEAR'){
  update();
 }
 function finishChallengeFail(c){
+ soundManager.stopTransientSe();
  soundManager.playSe('bonus_chance_lose');
  soundManager.fadeOutBgm(420, 'normal');
  showBossBattle(c.boss, 'hit');
@@ -1575,6 +1657,49 @@ function advanceChallenge(source='auto'){
  }
 }
 
+function advanceChallengeByStop(stopCount){
+ const c = state.challenge;
+ if(!c) return;
+ c.step = stopCount;
+ if(stopCount === 1){
+   soundManager.playSe(c.boss.expect >= 75 ? 'survive' : 'warning');
+   showBossBattle(c.boss, 'intro');
+   setLcdMood('warning', 900);
+   setHero('idle', state.heroCostume);
+   setEnemies('walk');
+ }else if(stopCount === 2){
+   showBossBattle(c.boss, 'attack');
+   soundManager.playSe(c.role === 'SUIKA' ? 'shoot' : c.role === 'CHERRY' ? 'bat_attack' : 'attack');
+   setHeroOnce(c.role === 'SUIKA' ? 'shoot' : 'melee', state.heroCostume, 'idle', 520);
+   setLcdMood(c.boss.expect >= 60 ? 'survive' : 'shadow', 900);
+   if(c.boss.expect >= 60 || c.clear) flash();
+ }else if(stopCount === 3){
+   setLcdMood(c.boss.expect >= 75 || c.clear ? 'survive' : 'warning', 1000);
+   soundManager.duck(700, .08);
+   showBossBattle(c.boss, c.clear ? 'hit' : 'attack');
+ }
+ update();
+}
+
+function finishChallengeReelGame(){
+ const c = state.challenge;
+ if(!c) return;
+ state.spinning = false;
+ state.settling = false;
+ state.pay = 0;
+ state.bet = 0;
+ if(c.clear){
+   finishChallengeSuccess(c);
+ }else if(c.revive){
+   showBossBattle(c.boss, 'hit');
+   setLcdMood('silent', c.boss.expect >= 60 ? 720 : 420);
+   timers.challenge = setTimeout(()=>startChallengeRevive(c), c.boss.expect >= 60 ? 720 : 420);
+   update();
+ }else{
+   finishChallengeFail(c);
+ }
+}
+
 function applyActualStops(result){
  if(!result || state.stopIndices.some(idx => !Number.isFinite(idx))) return result;
  result.targetIndices = [...state.stopIndices];
@@ -1618,6 +1743,14 @@ function revealBonusNotice(bonus, type='instant'){
    pushHistory(`BONUS NOTICE ${type.toUpperCase()}`, 0);
    update();
  }, type === 'next' ? 620 : 0);
+}
+function autoStartBonusAfterReady(delay=850){
+ clearTimer('autoBonusStart');
+ timers.autoBonusStart = setTimeout(() => {
+   if(state.pendingBonus && state.bonusReady && !state.spinning && !state.bonusActive && !state.challenge && !state.longFreeze){
+     startBonus();
+   }
+ }, delay);
 }
 function scheduleBonusNotice(bonus, preferredType=null){
  const type = preferredType || chooseBonusNotice();
@@ -1694,11 +1827,13 @@ function settle(){
    else showBonusConfirm();
    if(readyHit) soundManager.playSe('bonus_confirm');
    pushHistory(`${bonusInfo[r.bonusReady].label}${lineText(r)} ${readyHit ? 'READY' : 'MISS'}`, 0);
+   if(readyHit) autoStartBonusAfterReady();
  }else if(r.bonus){
    state.credit+=state.pay; state.diff+=state.pay;
    state.pendingBonus = r.bonus;
    state.bonusReady = lineMatchesSymbols(r, bonusInfo[r.bonus].center);
    pushHistory(`${r.role}${lineText(r)}+${bonusInfo[r.bonus].label}${state.presentation === 'freeze' ? ' LONG FREEZE' : ''}`, state.pay);
+   if(state.bonusReady) autoStartBonusAfterReady(1100);
    if(state.presentation === 'freeze'){
      startLongFreeze(r.bonus);
    }else{
@@ -1768,7 +1903,7 @@ function update(){
  els.modeText.textContent=state.bonusActive?`${state.bonusActive.label} ${state.bonusActive.remaining}`:state.challenge?'BONUS CHANCE':state.pendingBonus?`${bonusInfo[state.pendingBonus].label}成立`:state.spinning?'回転中':state.door>0?`SURVIVE ${state.door}`:'通常';
  els.history.innerHTML=state.history.map(x=>`<li>${x}</li>`).join('');
  document.querySelectorAll('.stop-hit').forEach((b,i)=>b.disabled=!state.spinning||state.stopped[i]||state.settling);
- $('#leverBtn').disabled=state.spinning||state.settling||(!state.bonusActive&&state.bet<3)||!!state.challenge||state.longFreeze; $('#maxBetBtn').disabled=state.spinning||state.settling||state.bet===3||state.credit<1||!!state.challenge||!!state.bonusActive||state.longFreeze; if(els.pushBtn) els.pushBtn.disabled=state.longFreeze||state.settling||((!!state.challenge && !state.challenge.awaitingPush) && !state.awaitingPushNotice);
+ $('#leverBtn').disabled=state.spinning||state.settling||(!state.bonusActive&&state.bet<3)||state.longFreeze; $('#maxBetBtn').disabled=state.spinning||state.settling||state.bet===3||state.credit<1||!!state.bonusActive||state.longFreeze; if(els.pushBtn) els.pushBtn.disabled=state.longFreeze||state.settling||((!!state.challenge && !state.challenge.awaitingPush) && !state.awaitingPushNotice);
  if(els.settingSelect) els.settingSelect.disabled = state.spinning || !!state.challenge;
  soundManager.ensureContextualBgm();
  updateHeroRuntimeDebug();
