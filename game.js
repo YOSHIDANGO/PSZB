@@ -703,16 +703,48 @@ function setBonusLcd(type){
    setHero('rush');
    setEnemies('walk');
  }else if(type === 'REG'){
-   setHero('melee');
-   setEnemies('attack');
+   setHero('idle');
+   setEnemies('walk');
  }else{
-   setHero('shoot');
-   setEnemies('hit');
+   setHero('idle');
+   setEnemies('walk');
  }
 }
 function clearBonusLcd(){
  if(els.lcdWindow) els.lcdWindow.classList.remove('bonus-play','bonus-sbb','bonus-big','bonus-reg');
  if(els.stageBg) els.stageBg.src = backgrounds[state.stage]?.src || backgrounds[0].src;
+}
+function playBonusHitSequence(){
+ if(!state.bonusActive) return;
+ if(state.bonusActive.type?.startsWith('SBB')){
+   setHero('rush');
+   setEnemies('walk');
+   return;
+ }
+ clearTimer('bonusHitSeq1');
+ clearTimer('bonusHitSeq2');
+ clearTimer('bonusHitSeq3');
+ setActorShown(true, true, false);
+ setHero('idle', 'school');
+ setEnemies('walk');
+ timers.bonusHitSeq1 = setTimeout(() => {
+   if(!state.bonusActive) return;
+   soundManager.playSe('shoot');
+   setHeroOnce('shoot', 'school', 'idle', 360);
+   setEnemies('hit');
+ }, 260);
+ timers.bonusHitSeq2 = setTimeout(() => {
+   if(!state.bonusActive) return;
+   soundManager.playSe('zombie_die');
+   setEnemies('down');
+ }, 560);
+ timers.bonusHitSeq3 = setTimeout(() => {
+   if(!state.bonusActive) return;
+   randomizeActors();
+   setActorShown(true, true, false);
+   setHero('idle', 'school');
+   setEnemies('walk');
+ }, 1050);
 }
 function startLongFreeze(bonus){
  if(!els.longFreeze) return false;
@@ -1785,6 +1817,7 @@ function settle(){
    state.bonusActive.remaining = Math.max(0, state.bonusActive.remaining - state.pay);
    state.bonusActive.games++;
    clearPrizeScene();
+   playBonusHitSequence();
    pushHistory(`${state.bonusActive.label} ${state.bonusActive.games}G`, state.pay);
    if(state.bonusActive.remaining <= 0) finishBonus();
    update();
@@ -1878,6 +1911,9 @@ function startBonus(){
  update();
 }
 function finishBonus(){
+ clearTimer('bonusHitSeq1');
+ clearTimer('bonusHitSeq2');
+ clearTimer('bonusHitSeq3');
  const type = state.bonusActive?.type;
  state.bonusActive = null;
  setHeroCostume('school');
