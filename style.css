@@ -4,6 +4,246 @@
   --ink:#fff4ef;
   --muted:#c6b2aa;
 }
+
+/* v26 cabinet overlay effects */
+.cabinet-effect-layer{
+  position:absolute;
+  inset:0;
+  z-index:8;
+  pointer-events:none;
+  overflow:hidden;
+  border-radius:2px;
+}
+.cabinet-effect-layer > *{
+  position:absolute;
+  pointer-events:none;
+}
+.cabinet-flash,
+.cabinet-blackout{
+  inset:0;
+  opacity:0;
+}
+.cabinet-flash{
+  background:rgba(255,30,30,.34);
+  mix-blend-mode:screen;
+}
+.cabinet-blackout{
+  background:rgba(0,0,0,.92);
+}
+.lamp,
+.lcd-frame-glow,
+.reel-frame-glow,
+.push-glow,
+.stop-glow,
+.bottom-panel-glow{
+  opacity:0;
+  background:rgba(255,0,0,.28);
+  box-shadow:0 0 13px rgba(255,0,0,.82),0 0 30px rgba(255,0,0,.42);
+  transition:opacity 120ms ease, transform 120ms ease, filter 120ms ease;
+  mix-blend-mode:screen;
+}
+.lamp{border-radius:999px}
+.lamp-left-top{left:8%;top:3%;width:18%;height:8%;clip-path:polygon(0 8%,100% 0,82% 100%,15% 88%)}
+.lamp-right-top{left:74%;top:3%;width:18%;height:8%;clip-path:polygon(0 0,100% 8%,85% 88%,18% 100%)}
+.lamp-left-side{left:5%;top:43%;width:6%;height:27%;border-radius:20px}
+.lamp-right-side{left:89%;top:43%;width:6%;height:27%;border-radius:20px}
+.lamp-left-reel{left:13%;top:44%;width:8%;height:18%;border-radius:16px}
+.lamp-right-reel{left:79%;top:44%;width:8%;height:18%;border-radius:16px}
+.lcd-frame-glow{
+  left:20%;top:13%;width:60%;height:29%;
+  border:2px solid rgba(255,0,0,.38);
+  border-radius:12px;
+  background:rgba(255,0,0,.08);
+  box-shadow:inset 0 0 18px rgba(255,0,0,.55),0 0 22px rgba(255,0,0,.5);
+}
+.reel-frame-glow{
+  left:22%;top:44%;width:56%;height:17%;
+  border:2px solid rgba(255,0,0,.38);
+  border-radius:8px;
+  background:rgba(255,255,255,.06);
+  box-shadow:inset 0 0 16px rgba(255,255,255,.32),0 0 20px rgba(255,0,0,.45);
+}
+.push-glow{
+  left:40%;top:64%;width:20%;height:6%;
+  border-radius:12px;
+  background:rgba(255,255,255,.2);
+  box-shadow:0 0 16px rgba(255,255,255,.8),0 0 32px rgba(255,0,0,.65);
+}
+.stop-glow{
+  top:70%;width:8%;height:7%;
+  border-radius:50%;
+  background:rgba(255,35,35,.42);
+  box-shadow:0 0 16px rgba(255,0,0,.95),0 0 30px rgba(255,255,255,.35);
+}
+.stop-glow-1{left:32%}
+.stop-glow-2{left:46%}
+.stop-glow-3{left:60%}
+.bottom-panel-glow{
+  left:8%;top:75%;width:84%;height:17%;
+  border-radius:24px;
+  background:radial-gradient(ellipse at 50% 50%,rgba(255,0,0,.22),transparent 70%);
+  box-shadow:inset 0 0 18px rgba(255,0,0,.34),0 0 24px rgba(255,0,0,.25);
+}
+.cabinet-effect-layer.cabinet-stop-1 .stop-glow-1,
+.cabinet-effect-layer.cabinet-stop-2 .stop-glow-2,
+.cabinet-effect-layer.cabinet-stop-3 .stop-glow-3{opacity:.95;animation:cabinetStopPulse .22s ease-out both}
+.cabinet-effect-layer.cabinet-bet .push-glow{opacity:.42;animation:cabinetShortPulse .22s ease-out both}
+.cabinet-effect-layer.cabinet-lever .lcd-frame-glow,
+.cabinet-effect-layer.cabinet-lever .reel-frame-glow{opacity:.28;animation:cabinetShortPulse .28s ease-out both}
+.cabinet-effect-layer.cabinet-payout .reel-frame-glow{opacity:.48;animation:cabinetWhitePulse .36s ease-out both}
+.cabinet-effect-layer.cabinet-rare-weak .lamp-left-side,
+.cabinet-effect-layer.cabinet-rare-weak .lamp-right-side,
+.cabinet-effect-layer.cabinet-rare-weak .reel-frame-glow{opacity:.58;animation:cabinetRedBlink .42s steps(2) 1}
+.cabinet-effect-layer.cabinet-rare-strong .lamp-left-top,
+.cabinet-effect-layer.cabinet-rare-strong .lamp-right-top,
+.cabinet-effect-layer.cabinet-rare-strong .lamp-left-side,
+.cabinet-effect-layer.cabinet-rare-strong .lamp-right-side,
+.cabinet-effect-layer.cabinet-rare-strong .lcd-frame-glow,
+.cabinet-effect-layer.cabinet-rare-strong .reel-frame-glow{opacity:.86;animation:cabinetRedBlink .28s steps(2) 4}
+.cabinet-effect-layer.cabinet-suika-weak .reel-frame-glow{
+  opacity:.5;
+  background:rgba(220,245,255,.1);
+  box-shadow:inset 0 0 16px rgba(220,245,255,.44),0 0 22px rgba(220,245,255,.48);
+  animation:cabinetWhitePulse .42s ease-out both;
+}
+.cabinet-effect-layer.cabinet-reachme-hint .lamp-left-side,
+.cabinet-effect-layer.cabinet-reachme-hint .lamp-right-side{opacity:.48;animation:cabinetSilentLamp .55s ease-out both}
+.cabinet-effect-layer.cabinet-blackout-on .cabinet-blackout{opacity:1;animation:cabinetBlackout .58s ease-out both}
+.cabinet-effect-layer.cabinet-flash-weak .cabinet-flash{opacity:.36;animation:cabinetFlash .28s ease-out both}
+.cabinet-effect-layer.cabinet-flash-strong .cabinet-flash{opacity:.72;animation:cabinetFlash .46s steps(2) 2}
+.cabinet-effect-layer.cabinet-bonus-chance .lamp-left-side,
+.cabinet-effect-layer.cabinet-bonus-chance .lamp-right-side,
+.cabinet-effect-layer.cabinet-bonus-chance .lcd-frame-glow{opacity:.72;animation:cabinetRedBlink .42s steps(2) infinite}
+.cabinet-effect-layer.cabinet-bonus-confirm .lamp,
+.cabinet-effect-layer.cabinet-bonus-confirm .lcd-frame-glow,
+.cabinet-effect-layer.cabinet-bonus-confirm .reel-frame-glow,
+.cabinet-effect-layer.cabinet-bonus-confirm .bottom-panel-glow{opacity:.9;animation:cabinetConfirmPulse .86s ease-in-out infinite}
+.cabinet-effect-layer.cabinet-bonus-confirm .push-glow{opacity:.55;animation:cabinetConfirmPulse 1.2s ease-in-out infinite}
+.cabinet-effect-layer.cabinet-push-active .push-glow{opacity:.95;animation:cabinetPushPulse .5s ease-in-out infinite}
+.cabinet-effect-layer.cabinet-bonus .lamp-left-side,
+.cabinet-effect-layer.cabinet-bonus .lamp-right-side,
+.cabinet-effect-layer.cabinet-bonus .bottom-panel-glow{opacity:.46;animation:cabinetSlowGlow 1.3s ease-in-out infinite}
+.cabinet-effect-layer.cabinet-survive .lamp-left-side,
+.cabinet-effect-layer.cabinet-survive .lamp-right-side{opacity:.44;animation:cabinetSlowGlow 1.05s ease-in-out infinite}
+.cabinet-effect-layer.cabinet-shake{animation:cabinetShake .18s linear 2}
+@keyframes cabinetShortPulse{0%{opacity:0;transform:scale(.98)}45%{opacity:.8;transform:scale(1.02)}100%{opacity:0;transform:scale(1)}}
+@keyframes cabinetStopPulse{0%{opacity:0;transform:scale(.78)}70%{opacity:1;transform:scale(1.1)}100%{opacity:0;transform:scale(1)}}
+@keyframes cabinetWhitePulse{0%{opacity:0}45%{opacity:.7;filter:brightness(1.5)}100%{opacity:0}}
+@keyframes cabinetRedBlink{50%{opacity:.12;filter:brightness(1.6)}}
+@keyframes cabinetSilentLamp{0%,100%{opacity:0}42%{opacity:.58}}
+@keyframes cabinetBlackout{0%{opacity:0}28%{opacity:1}100%{opacity:0}}
+@keyframes cabinetFlash{0%{opacity:0}35%{opacity:.86}100%{opacity:0}}
+@keyframes cabinetConfirmPulse{50%{opacity:.34;filter:brightness(1.65)}}
+@keyframes cabinetPushPulse{50%{opacity:.28;filter:brightness(1.8);transform:scale(1.04)}}
+@keyframes cabinetSlowGlow{50%{opacity:.22;filter:brightness(1.35)}}
+@keyframes cabinetShake{25%{transform:translateX(-1px)}75%{transform:translateX(1px)}}
+
+/* v25 BONUS CHANCE presentation polish */
+.boss-battle.on{
+  isolation:isolate;
+}
+.boss-battle.on:before{
+  content:"BONUS CHANCE";
+  left:0 !important;
+  right:0 !important;
+  top:4% !important;
+  transform:none !important;
+  width:62%;
+  margin:0 auto;
+  padding:5px 0 7px !important;
+  border:1px solid rgba(255,255,255,.2) !important;
+  border-left:0 !important;
+  border-right:0 !important;
+  border-radius:0 !important;
+  background:
+    linear-gradient(90deg,transparent,rgba(150,0,0,.92) 12%,rgba(12,0,0,.92) 50%,rgba(150,0,0,.92) 88%,transparent),
+    repeating-linear-gradient(0deg,rgba(255,255,255,.12) 0 1px,transparent 1px 4px) !important;
+  color:#fff;
+  font-size:clamp(15px,2.7vw,27px) !important;
+  line-height:1;
+  text-align:center;
+  letter-spacing:.16em !important;
+  text-shadow:0 2px 2px #000,0 0 14px rgba(255,0,0,.9),0 0 28px rgba(255,255,255,.28) !important;
+  box-shadow:0 10px 24px rgba(0,0,0,.45),0 0 20px rgba(180,0,0,.28);
+}
+.boss-battle.on:after{
+  content:attr(data-phase) !important;
+  position:absolute;
+  right:4%;
+  top:7%;
+  z-index:5;
+  min-width:58px;
+  padding:3px 7px 4px;
+  border:1px solid rgba(255,255,255,.18);
+  background:rgba(0,0,0,.62) !important;
+  color:rgba(255,255,255,.88);
+  font-size:clamp(8px,1.2vw,12px);
+  font-weight:900;
+  line-height:1;
+  text-align:center;
+  letter-spacing:.1em;
+  text-shadow:0 1px 2px #000;
+  opacity:1 !important;
+}
+.boss-battle.hot:after,
+.boss-battle.mid:after{
+  background:rgba(70,0,0,.72) !important;
+  color:#fff;
+  animation:bossPhasePulse .52s steps(2) infinite !important;
+}
+.boss-rate{
+  left:4% !important;
+  right:4% !important;
+  top:auto !important;
+  bottom:5% !important;
+  display:grid !important;
+  grid-template-columns:auto 1fr auto;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px !important;
+  border-radius:0 !important;
+  border:1px solid rgba(255,255,255,.16) !important;
+  border-left:3px solid rgba(220,30,30,.85) !important;
+  background:
+    linear-gradient(90deg,rgba(90,0,0,.8),rgba(0,0,0,.78) 42%,rgba(0,0,0,.55)),
+    repeating-linear-gradient(0deg,rgba(255,255,255,.07) 0 1px,transparent 1px 4px) !important;
+  box-shadow:0 8px 20px rgba(0,0,0,.45);
+  text-shadow:0 2px 3px #000;
+}
+.boss-rate span,
+.boss-rate i{
+  color:rgba(255,255,255,.66);
+  font-size:clamp(7px,1.1vw,11px);
+  font-style:normal;
+  font-weight:900;
+  letter-spacing:.14em;
+  white-space:nowrap;
+}
+.boss-rate b{
+  min-width:0;
+  overflow:hidden;
+  color:#fff;
+  font-size:clamp(13px,2.1vw,21px);
+  font-weight:1000;
+  line-height:1;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  letter-spacing:.04em;
+}
+.boss-battle.hot .boss-rate{
+  border-color:rgba(255,80,80,.78) !important;
+  border-left-color:#ff2638 !important;
+  background:
+    linear-gradient(90deg,rgba(150,0,0,.88),rgba(12,0,0,.84) 42%,rgba(80,0,0,.62)),
+    repeating-linear-gradient(0deg,rgba(255,255,255,.09) 0 1px,transparent 1px 4px) !important;
+  animation:bossPlateHot .46s steps(2) infinite !important;
+}
+.boss-battle.low .boss-rate{
+  border-left-color:rgba(170,170,170,.62) !important;
+  background:linear-gradient(90deg,rgba(35,35,35,.84),rgba(0,0,0,.72)) !important;
+}
+@keyframes bossPhasePulse{50%{filter:brightness(1.35);transform:translateY(1px)}}
+@keyframes bossPlateHot{50%{filter:brightness(1.28);box-shadow:0 8px 20px rgba(0,0,0,.45),0 0 18px rgba(255,0,0,.42)}}
 *{box-sizing:border-box}
 html,body{
   margin:0;

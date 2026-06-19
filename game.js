@@ -29,6 +29,21 @@ const chancePatterns = [
  {label:'CHANCE目C', symbols:['suika','bell','cherry'], rows:[1,0,1]},
  {label:'HERO目', symbols:['hero','cherry','hero'], rows:[0,1,2]}
 ];
+const reachMePatterns = [
+ {name:'RED-REPLAY-BAR', symbols:['red7','replay','bar']},
+ {name:'BLUE-CHERRY-RED', symbols:['blue7','cherry','red7']},
+ {name:'HERO-BAR-HERO', symbols:['hero','bar','hero']},
+ {name:'BAR-BAT-RED', symbols:['bar','bell','red7']},
+ {name:'RED-AMMO-BLUE', symbols:['red7','suika','blue7']},
+ {name:'BLUE-HERO-BAR', symbols:['blue7','hero','bar']},
+ {name:'CHERRY-BAR-RED', symbols:['cherry','bar','red7']},
+ {name:'AMMO-REPLAY-BLUE', symbols:['suika','replay','blue7']},
+ {name:'HERO-REPLAY-RED', symbols:['hero','replay','red7']},
+ {name:'BAR-HERO-BLUE', symbols:['bar','hero','blue7']},
+ {name:'RED-HERO-BAR', symbols:['red7','hero','bar']},
+ {name:'BLUE-REPLAY-RED', symbols:['blue7','replay','red7']}
+];
+const middleLine = {key:'middle', label:'荳ｭ谿ｵ', rows:[1,1,1], weight:5};
 const REEL_STEP_MS = 70;
 const MAX_SLIP = 4;
 const LONG_FREEZE_BLACKOUT_MS = 3000;
@@ -115,13 +130,25 @@ const bossDefs = [
 ];
 
 const $ = q => document.querySelector(q);
+function createStopDebug(){
+ return {
+   currentRole:'-', displayedRole:'-', roleStrength:'-', pendingBonus:'-', currentBonusType:'-',
+   leftStopSymbol:'-', centerStopSymbols:'-', stopResult:'-', isReachMe:false, reachMeName:'-',
+   isSingleCherry:false, isWeakCherry:false, isStrongCherry:false,
+   isWeakSuika:false, isStrongSuika:false, isSpecialSuika:false,
+   slipCountLeft:0, slipCountCenter:0, slipCountRight:0,
+   avoidedCherrySuikaOnMiss:false, bonusAimAssist:false
+ };
+}
 const state = {
   credit:50, bet:0, pay:0, diff:0, games:0, big:0, reg:0, sbb:0, bell:0, spinning:false,
   stopped:[true,true,true], result:null, center:['blue7','bell','cherry'], history:[], stage:0,
   enemyA:'highschool_girl', enemyB:'salaryman', pendingBonus:null, bonusReady:false, setting:1, door:0, doorHits:0,
   presentation:'idle', currentSceneCategory:'idle', currentDropSymbol:'-', currentEnemyAction:'idle', currentBossPhase:'-', currentBossAction:'-', heroCostume:'school', heroAction:'idle', heroFrameIndex:0, heroFrameTotal:1, heroFramePath:'assets/sprites/hero/school/00.png', heroLoadStatus:'OK',
   quietGames:0, contradiction:false, settling:false, performancePhase:0, awaitingPushNotice:null, nextGameNotice:null,
-  challenge:null, bonusActive:null, reelBases:[0,0,0], stopIndices:[0,0,0], spinStartedAt:0, longFreeze:false, forceLongFreeze:false
+  challenge:null, bonusActive:null, reelBases:[0,0,0], stopIndices:[0,0,0], spinStartedAt:0, longFreeze:false, forceLongFreeze:false,
+  currentCabinetMode:'normal', lastCabinetEffect:'-', cabinetBlackoutActive:false, pushGlowActive:false,
+  stopDebug:createStopDebug()
 };
 
 const heroDebugState = {
@@ -140,12 +167,95 @@ const els = {
  lcdStatus:$('#lcdStatus'), flash:$('#screenFlash'), pushBtn:$('#pushBtn'), settingSelect:$('#settingSelect'),
  prizeScene:$('#prizeScene'), prizeBox:$('#prizeBox'), prizeBurst:$('#prizeBurst'), prizeSymbol:$('#prizeSymbol'),
  bossBattle:$('#bossBattle'), bossSprite:$('#bossSprite'), bossRate:$('#bossRate'),
- longFreeze:$('#longFreeze'), longFreezeVideo:$('#longFreezeVideo')
+ longFreeze:$('#longFreeze'), longFreezeVideo:$('#longFreezeVideo'), cabinetEffectLayer:$('#cabinetEffectLayer')
 };
 
 const timers = {};
 function clearAnim(name){ if(timers[name]){ clearInterval(timers[name]); timers[name] = null; } }
 function clearTimer(name){ if(timers[name]){ clearTimeout(timers[name]); timers[name] = null; } }
+const cabinetEffectClasses = [
+ 'cabinet-bet','cabinet-lever','cabinet-stop-1','cabinet-stop-2','cabinet-stop-3','cabinet-payout',
+ 'cabinet-rare-weak','cabinet-rare-strong','cabinet-suika-weak','cabinet-reachme-hint',
+ 'cabinet-blackout-on','cabinet-flash-weak','cabinet-flash-strong','cabinet-bonus-chance',
+ 'cabinet-bonus-confirm','cabinet-push-active','cabinet-bonus','cabinet-survive','cabinet-shake'
+];
+const cabinetModeClasses = ['cabinet-mode-normal','cabinet-mode-bonus-chance','cabinet-mode-bonus-confirm','cabinet-mode-bonus','cabinet-mode-survive','cabinet-mode-freeze'];
+function clearCabinetEffects(options={}){
+ const layer = els.cabinetEffectLayer;
+ if(!layer) return;
+ const keepMode = options.keepMode !== false;
+ layer.classList.remove(...cabinetEffectClasses);
+ if(!keepMode) layer.classList.remove(...cabinetModeClasses);
+ state.lastCabinetEffect = options.keepLast ? state.lastCabinetEffect : '-';
+ state.cabinetBlackoutActive = false;
+ state.pushGlowActive = false;
+}
+function setCabinetMode(mode='normal'){
+ const layer = els.cabinetEffectLayer;
+ if(!layer) return;
+ layer.classList.remove(...cabinetModeClasses, 'cabinet-bonus-chance', 'cabinet-bonus', 'cabinet-survive', 'cabinet-bonus-confirm');
+ state.currentCabinetMode = mode;
+ layer.classList.add(`cabinet-mode-${mode}`);
+ if(mode === 'bonus-chance') layer.classList.add('cabinet-bonus-chance');
+ if(mode === 'bonus-confirm') layer.classList.add('cabinet-bonus-confirm');
+ if(mode === 'bonus') layer.classList.add('cabinet-bonus');
+ if(mode === 'survive') layer.classList.add('cabinet-survive');
+ if(mode === 'freeze') layer.classList.add('cabinet-blackout-on');
+}
+function triggerCabinetEffect(type, duration=520){
+ const layer = els.cabinetEffectLayer;
+ if(!layer || !type) return;
+ const cls = `cabinet-${type}`;
+ state.lastCabinetEffect = type;
+ if(cls === 'cabinet-blackout-on') state.cabinetBlackoutActive = true;
+ layer.classList.remove(cls);
+ layer.offsetHeight;
+ layer.classList.add(cls);
+ clearTimer(`cabinet:${cls}`);
+ if(duration > 0){
+   timers[`cabinet:${cls}`] = setTimeout(() => {
+     layer.classList.remove(cls);
+     if(cls === 'cabinet-blackout-on') state.cabinetBlackoutActive = false;
+   }, duration);
+ }
+}
+function pulseStopButton(index){
+ triggerCabinetEffect(`stop-${index + 1}`, 280);
+}
+function setPushGlow(active){
+ const layer = els.cabinetEffectLayer;
+ if(!layer) return;
+ state.pushGlowActive = !!active;
+ layer.classList.toggle('cabinet-push-active', !!active);
+}
+function cabinetRareEffect(debug, result){
+ if(debug?.isSingleCherry){
+   triggerCabinetEffect('blackout-on', 620);
+   setTimeout(()=>triggerCabinetEffect('flash-strong', 520), 360);
+   return;
+ }
+ if(debug?.isStrongCherry || debug?.isStrongSuika || debug?.isSpecialSuika || result?.role === 'HERO'){
+   triggerCabinetEffect('rare-strong', 980);
+   triggerCabinetEffect('shake', 420);
+   if(debug?.isSpecialSuika || result?.role === 'HERO') triggerCabinetEffect('flash-strong', 460);
+   return;
+ }
+ if(debug?.isWeakSuika) triggerCabinetEffect('suika-weak', 620);
+ else triggerCabinetEffect('rare-weak', 620);
+}
+function updateCabinetDebug(){
+ const info = $('#cabinetDebugInfo');
+ if(!info) return;
+ const layer = els.cabinetEffectLayer;
+ const active = layer ? [...layer.classList].filter(c => c.startsWith('cabinet-')).join(' ') : '-';
+ info.innerHTML = [
+   ['currentCabinetMode', state.currentCabinetMode || '-'],
+   ['lastCabinetEffect', state.lastCabinetEffect || '-'],
+   ['activeCabinetClasses', active || '-'],
+   ['isBlackoutActive', String(!!state.cabinetBlackoutActive)],
+   ['isPushGlowActive', String(!!state.pushGlowActive)]
+ ].map(([k,v])=>`<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+}
 const soundManager = (() => {
  const bgmPaths = {
    normal:'assets/audio/normal.mp3',
@@ -641,6 +751,8 @@ function clearBossBattle(){
  if(!els.bossBattle) return;
  soundManager.stopTransientSe();
  els.bossBattle.className = 'boss-battle';
+ delete els.bossBattle.dataset.phase;
+ delete els.bossBattle.dataset.threat;
  state.currentBossPhase = '-';
  state.currentBossAction = '-';
  clearAnim('boss');
@@ -654,9 +766,11 @@ function clearBossBattle(){
 }
 function showBonusConfirm(){
  if(els.lcdWindow) els.lcdWindow.classList.add('bonus-confirm');
+ setCabinetMode('bonus-confirm');
 }
 function clearBonusConfirm(){
  if(els.lcdWindow) els.lcdWindow.classList.remove('bonus-confirm');
+ if(state.currentCabinetMode === 'bonus-confirm') setCabinetMode(state.door > 0 ? 'survive' : 'normal');
 }
 function clearLcdMood(){
  if(!els.lcdWindow) return;
@@ -752,6 +866,8 @@ function startLongFreeze(bonus){
  soundManager.fadeOutBgm(180);
  soundManager.playSe('freeze');
  state.longFreeze = true;
+ setCabinetMode('freeze');
+ triggerCabinetEffect('blackout-on', 0);
  clearPrizeScene();
  clearBossBattle();
  clearBonusConfirm();
@@ -769,7 +885,9 @@ function startLongFreeze(bonus){
      video.pause();
      video.currentTime = 0;
    }
+   clearCabinetEffects({keepMode:false});
    showBonusConfirm();
+   triggerCabinetEffect('flash-strong', 900);
    soundManager.playSe('bonus_confirm');
    playEffect('special', bonusInfo[bonus]?.badge || 'BONUS');
    update();
@@ -867,15 +985,21 @@ function showBossBattle(boss, phase='intro'){
  if(!els.bossBattle || !boss) return;
  soundManager.stopTransientSe();
  setActorShown(true, true, true);
+ setCabinetMode('bonus-chance');
  state.currentBossPhase = phase;
  const tier = boss.expect >= 75 ? 'hot' : boss.expect >= 55 ? 'mid' : 'low';
+ const threat = boss.expect >= 90 ? 'MAX' : boss.expect >= 75 ? 'HIGH' : boss.expect >= 55 ? 'MID' : boss.expect >= 40 ? 'LOW+' : 'LOW';
  els.bossBattle.className = `boss-battle on ${phase} ${tier}`;
+ els.bossBattle.dataset.phase = phase.toUpperCase();
+ els.bossBattle.dataset.threat = threat;
  if(els.lcdWindow) els.lcdWindow.classList.add('boss-mode');
- if(els.bossRate) els.bossRate.textContent = `${boss.label} ${boss.expect}%`;
+ if(els.bossRate) els.bossRate.innerHTML = `<span>ENCOUNTER</span><b>${boss.label}</b><i>THREAT ${threat}</i>`;
  const action = phase === 'attack' ? 'attack' : phase === 'hit' ? 'hit' : phase === 'down' ? 'down' : phase === 'intro' ? 'run' : 'idle';
  if(phase === 'intro'){ soundManager.playSe('moan'); soundManager.playSe('stage_change'); }
- if(phase === 'hit') soundManager.playSe('hit');
- if(phase === 'down') soundManager.playSe('zombie_die');
+ if(phase === 'intro') triggerCabinetEffect('blackout-on', 420);
+ if(phase === 'attack'){ triggerCabinetEffect('rare-strong', 520); triggerCabinetEffect('shake', 300); }
+ if(phase === 'hit'){ soundManager.playSe('hit'); triggerCabinetEffect('flash-weak', 320); }
+ if(phase === 'down'){ soundManager.playSe('zombie_die'); triggerCabinetEffect('flash-strong', 520); }
  playBossFrames(boss, action, phase);
 }
 function clearPrizeScene(){
@@ -995,6 +1119,41 @@ function buildLineStop(symbols, line=weightedPick(payLines), controlled=true){
  const targetIndices = symbols.map((symbol, reelIndex) => centerIndexForSymbolAtRow(reelIndex, symbol, line.rows[reelIndex], controlled));
  return {line, targetIndices, center:targetIndices.map((idx, reelIndex) => reelMap[reelIndex][idx]), grid:getVisibleGrid(targetIndices)};
 }
+function buildMiddleStop(symbols, controlled=true){
+ return buildLineStop(symbols, middleLine, controlled);
+}
+function buildCherryStop(strength='CHERRY_WEAK'){
+ const map = {
+   CHERRY_WEAK:['cherry','cherry','bell'],
+   CHERRY_STRONG:['cherry','cherry','cherry'],
+   CHERRY_SINGLE:['cherry','bell','replay']
+ };
+ const stop = buildMiddleStop(map[strength] || map.CHERRY_WEAK, true);
+ return {...stop, roleStrength:strength, displayedRole:strength};
+}
+function buildSuikaStop(strength='SUIKA_WEAK'){
+ const map = {
+   SUIKA_WEAK:['suika','suika','suika'],
+   SUIKA_STRONG:['suika','suika','bell'],
+   SUIKA_SPECIAL:['suika','hero','red7']
+ };
+ const stop = buildMiddleStop(map[strength] || map.SUIKA_WEAK, true);
+ return {...stop, roleStrength:strength, displayedRole:strength};
+}
+function buildHeroChanceStop(){
+ const options = [
+   ['hero','replay','red7'],
+   ['hero','bar','hero'],
+   ['blue7','hero','bar']
+ ];
+ const symbols = options[rand(options.length)];
+ return {...buildMiddleStop(symbols, true), roleStrength:'HERO_CHANCE', displayedRole:'HERO_CHANCE'};
+}
+function buildReachMeStop(){
+ const pattern = reachMePatterns[rand(reachMePatterns.length)];
+ const stop = buildMiddleStop(pattern.symbols, true);
+ return {...stop, isReachMe:true, reachMeName:pattern.name, roleStrength:'REACH_ME', displayedRole:'REACH_ME'};
+}
 function buildChanceStop(){
  const pattern = chancePatterns[rand(chancePatterns.length)];
  const targetIndices = pattern.symbols.map((symbol, reelIndex) => centerIndexForSymbolAtRow(reelIndex, symbol, pattern.rows[reelIndex], true));
@@ -1012,6 +1171,9 @@ function getRoleSymbols(role){
 }
 function buildOutcomeStop(roleResult){
  const symbols = getRoleSymbols(roleResult.role);
+ if(roleResult.role === 'CHERRY') return buildCherryStop('CHERRY_WEAK');
+ if(roleResult.role === 'SUIKA') return buildSuikaStop('SUIKA_WEAK');
+ if(roleResult.role === 'HERO') return buildHeroChanceStop();
  if(symbols) return buildLineStop(symbols, weightedPick(payLines), true);
  return buildMissStop();
 }
@@ -1228,6 +1390,7 @@ function maxBet(){
  const need=3-state.bet;
  if(state.credit<need)return;
  soundManager.playSe('bet');
+ triggerCabinetEffect('bet', 260);
  state.credit-=need; state.bet=3; state.diff-=need; state.pay=0; update();
 }
 function pushAction(){
@@ -1244,6 +1407,7 @@ function pushAction(){
      soundManager.playSe('push');
      state.challenge.pushed = true;
      state.challenge.awaitingPush = false;
+     setPushGlow(false);
      clearTimer('challenge');
      setLcdMood('silentContradiction', 520);
      timers.challenge = setTimeout(()=>advanceChallenge('push'), 520);
@@ -1253,8 +1417,8 @@ function pushAction(){
    return;
  }
  if(state.pendingBonus && !state.spinning){
-   if(state.bonusReady) startBonus();
-   else flash();
+   flash();
+   showBonusConfirm();
    return;
  }
  flash();
@@ -1277,6 +1441,12 @@ function leverOn(){
  if(!state.bonusActive && state.bet<3)return;
  soundManager.ensureContextualBgm();
  soundManager.playSe('lever');
+ clearCabinetEffects({keepMode:true});
+ if(state.bonusActive) setCabinetMode('bonus');
+ else if(state.door > 0) setCabinetMode('survive');
+ else if(state.pendingBonus) setCabinetMode('normal');
+ else setCabinetMode('normal');
+ triggerCabinetEffect('lever', 320);
  clearPrizeScene();
  clearBossBattle();
  if(!state.pendingBonus) clearBonusConfirm();
@@ -1285,6 +1455,7 @@ function leverOn(){
  state.games++;
  state.reelBases = reelMap.map(arr => rand(arr.length));
  state.stopIndices = [null,null,null];
+ state.stopDebug = createStopDebug();
  state.spinStartedAt = performance.now();
  state.performancePhase = 0;
  state.spinning=true; state.stopped=[false,false,false]; state.result=state.bonusActive ? drawBonusGameOutcome() : (state.pendingBonus ? drawPendingBonusOutcome() : drawOutcome()); state.center=state.result.center; state.presentation=choosePresentation(state.result);
@@ -1357,6 +1528,23 @@ function drawOutcome(){
  const overlapHit = !soloHit && base.role !== 'MISS' && overlap > 0 && Math.random() < overlap;
  const bonusHit = soloHit || overlapHit;
  if(!bonusHit){
+   if(base.role === 'CHERRY'){
+     const strength = Math.random() < .15 ? 'CHERRY_STRONG' : 'CHERRY_WEAK';
+     const stop = buildCherryStop(strength);
+     const fakeChallenge = strength === 'CHERRY_STRONG' && Math.random() < .32;
+     return {...base, roleStrength:strength, displayedRole:strength, bonus:null, hiddenBonus:null, challenge:fakeChallenge, ...stop, pay:2, badge:'CHERRY', effect:strength === 'CHERRY_STRONG' ? 'warning' : base.effect};
+   }
+   if(base.role === 'SUIKA'){
+     const strength = weightedChoice([{value:'SUIKA_WEAK',weight:84},{value:'SUIKA_STRONG',weight:13},{value:'SUIKA_SPECIAL',weight:3}]);
+     const stop = buildSuikaStop(strength);
+     const fakeChallenge = strength !== 'SUIKA_WEAK' && Math.random() < (strength === 'SUIKA_SPECIAL' ? .56 : .34);
+     return {...base, roleStrength:strength, displayedRole:strength, bonus:null, hiddenBonus:null, challenge:fakeChallenge, ...stop, pay:strength === 'SUIKA_WEAK' ? 5 : 0, badge:strength === 'SUIKA_SPECIAL' ? 'HERO' : 'AMMO', effect:strength === 'SUIKA_WEAK' ? base.effect : 'warning'};
+   }
+   if(base.role === 'HERO'){
+     const stop = buildHeroChanceStop();
+     const fakeChallenge = shouldFakeChallenge(base.role);
+     return {...base, roleStrength:'HERO_CHANCE', displayedRole:'HERO_CHANCE', bonus:null, hiddenBonus:null, challenge:fakeChallenge, ...stop, badge:'HERO', effect:'special'};
+   }
    const fakeChallenge = base.role !== 'MISS' && shouldFakeChallenge(base.role);
    const stop = fakeChallenge ? buildChanceStop() : buildOutcomeStop(base);
    return {...base, bonus:null, hiddenBonus:null, challenge:fakeChallenge, ...stop};
@@ -1364,20 +1552,38 @@ function drawOutcome(){
  const bonusType = chooseBonusType();
  const b = bonusInfo[bonusType];
  if(base.role === 'MISS' || soloHit){
-   const stop = buildLineStop(b.center, weightedPick(payLines), true);
+   const stop = Math.random() < .68 ? buildReachMeStop() : buildLineStop(b.center, weightedPick(payLines), true);
    return {...base, bonus:bonusType, hiddenBonus:null, challenge:false, ...stop, badge:b.badge, effect:'special'};
  }
- const stop = Math.random() < .62 ? buildChanceStop() : buildOutcomeStop(base);
+ if(base.role === 'CHERRY'){
+   const strength = weightedChoice([{value:'CHERRY_SINGLE',weight:34},{value:'CHERRY_STRONG',weight:48},{value:'CHERRY_WEAK',weight:18}]);
+   const stop = buildCherryStop(strength);
+   return {...base, roleStrength:strength, displayedRole:strength, bonus:strength === 'CHERRY_SINGLE' ? bonusType : null, hiddenBonus:strength === 'CHERRY_SINGLE' ? null : bonusType, challenge:strength !== 'CHERRY_SINGLE', ...stop, pay:strength === 'CHERRY_SINGLE' ? 0 : 2, badge:'CHERRY', effect:'warning'};
+ }
+ if(base.role === 'SUIKA'){
+   const strength = weightedChoice([{value:'SUIKA_SPECIAL',weight:42},{value:'SUIKA_STRONG',weight:44},{value:'SUIKA_WEAK',weight:14}]);
+   const stop = buildSuikaStop(strength);
+   return {...base, roleStrength:strength, displayedRole:strength, bonus:null, hiddenBonus:bonusType, challenge:true, ...stop, pay:strength === 'SUIKA_WEAK' ? 5 : 0, badge:strength === 'SUIKA_SPECIAL' ? 'HERO' : 'AMMO', effect:'warning'};
+ }
+ if(base.role === 'HERO'){
+   const stop = Math.random() < .55 ? buildReachMeStop() : buildHeroChanceStop();
+   return {...base, roleStrength:stop.roleStrength || 'HERO_CHANCE', displayedRole:stop.displayedRole || 'HERO_CHANCE', bonus:null, hiddenBonus:bonusType, challenge:true, ...stop, badge:'HERO', effect:'special'};
+ }
+ const stop = Math.random() < .62 ? buildReachMeStop() : buildOutcomeStop(base);
  return {...base, bonus:null, hiddenBonus:bonusType, challenge:true, ...stop, badge:'CHANCE', effect:base.effect};
 }
 function drawPendingBonusOutcome(){
  const bonus = state.pendingBonus;
  const info = bonusInfo[bonus];
  const base = drawBaseRole();
- const readyChance = 1;
+ const readyChance = .46;
  if(Math.random() < readyChance){
    const stop = buildLineStop(info.center, weightedPick(payLines), true);
-   return {role:'BONUS_READY', chance:1, ...stop, pay:0, badge:info.badge, effect:'special', bonusReady:bonus};
+   return {role:'BONUS_READY', chance:1, ...stop, pay:0, badge:info.badge, effect:'special', bonusReady:bonus, bonusAimAssist:true};
+ }
+ if(Math.random() < .36){
+   const stop = buildReachMeStop();
+   return {role:'PENDING_REACH', chance:1, ...stop, pay:0, badge:'CHANCE', effect:'special', bonus:null, hiddenBonus:null, challenge:false};
  }
  if(base.role === 'MISS'){
    return {...base, ...buildMissStop(), bonus:null, hiddenBonus:null, challenge:false};
@@ -1439,33 +1645,54 @@ function chooseTimedStopIndex(i){
  const base = currentReelIndex(i);
  const desired = intentSymbolAtReel(i);
  const row = state.result?.line?.rows?.[i] ?? 1;
+ if(state.stopDebug){
+   if(i === 0) state.stopDebug.avoidedCherrySuikaOnMiss = false;
+   state.stopDebug.bonusAimAssist = !!state.result?.bonusAimAssist;
+ }
  if(desired){
-   const assistRoles = ['BONUS_READY','REPLAY','BELL','BONUS_GAME'];
+   const assistRoles = ['REPLAY','BELL','BONUS_GAME'];
    const maxSlip = assistRoles.includes(state.result?.role) ? arr.length - 1 : MAX_SLIP;
    const candidates = [];
    for(let slip=0; slip<=maxSlip; slip++){
      const centerIndex = modIndex(base + slip, arr.length);
      if(getRowsForCenter(i, centerIndex)[row] === desired) candidates.push({centerIndex, slip});
    }
-   if(candidates.length) return candidates[0].centerIndex;
+   if(candidates.length){
+     if(state.stopDebug) state.stopDebug[['slipCountLeft','slipCountCenter','slipCountRight'][i]] = candidates[0].slip;
+     return candidates[0].centerIndex;
+   }
  }
  for(let slip=0; slip<=MAX_SLIP; slip++){
    const centerIndex = modIndex(base + slip, arr.length);
    const centerSymbol = getRowsForCenter(i, centerIndex)[1];
-   if(i === 0 && shouldSuppressLeftRare(state.result) && (['cherry','suika'].includes(centerSymbol) || leftCandidateHasRare(centerIndex))) continue;
-   if(!wouldCreateMissWin(i, centerIndex)) return centerIndex;
+   if(i === 0 && shouldSuppressLeftRare(state.result) && (['cherry','suika'].includes(centerSymbol) || leftCandidateHasRare(centerIndex))){
+     if(state.stopDebug) state.stopDebug.avoidedCherrySuikaOnMiss = true;
+     continue;
+   }
+   if(!wouldCreateMissWin(i, centerIndex)){
+     if(state.stopDebug) state.stopDebug[['slipCountLeft','slipCountCenter','slipCountRight'][i]] = slip;
+     return centerIndex;
+   }
  }
  if(i === 0 && shouldSuppressLeftRare(state.result)){
    for(let slip=MAX_SLIP + 1; slip<arr.length; slip++){
      const centerIndex = modIndex(base + slip, arr.length);
-     if(!leftCandidateHasRare(centerIndex) && !wouldCreateMissWin(i, centerIndex)) return centerIndex;
+     if(!leftCandidateHasRare(centerIndex) && !wouldCreateMissWin(i, centerIndex)){
+       if(state.stopDebug){
+         state.stopDebug.avoidedCherrySuikaOnMiss = true;
+         state.stopDebug.slipCountLeft = slip;
+       }
+       return centerIndex;
+     }
    }
  }
+ if(state.stopDebug) state.stopDebug[['slipCountLeft','slipCountCenter','slipCountRight'][i]] = 0;
  return base;
 }
 function stopReel(i){
  if(!state.spinning||state.stopped[i]||state.longFreeze||state.settling)return;
  soundManager.playSe(`stop${i + 1}`);
+ pulseStopButton(i);
  state.stopped[i]=true;
  const stopCount = state.stopped.filter(Boolean).length;
  const index = chooseTimedStopIndex(i);
@@ -1577,6 +1804,7 @@ function startChallengeReelGame(){
  state.pay = 0;
  state.reelBases = reelMap.map(arr => rand(arr.length));
  state.stopIndices = [null,null,null];
+ state.stopDebug = createStopDebug();
  state.spinStartedAt = performance.now();
  state.performancePhase = 0;
  state.spinning = true;
@@ -1596,9 +1824,12 @@ function challengeDelay(c, base){
 }
 function finishChallengeSuccess(c, label='CHANCE CLEAR'){
  const bonus = c.bonus || chooseBonusType();
+ setPushGlow(false);
  soundManager.stopTransientSe();
  soundManager.playSe('bonus_chance_win');
  soundManager.fadeOutBgm(420);
+ triggerCabinetEffect('flash-strong', 760);
+ setCabinetMode('bonus-confirm');
  showBossBattle(c.boss, 'down');
  state.challenge = null;
  state.pendingBonus = bonus;
@@ -1611,9 +1842,11 @@ function finishChallengeSuccess(c, label='CHANCE CLEAR'){
  update();
 }
 function finishChallengeFail(c){
+ setPushGlow(false);
  soundManager.stopTransientSe();
  soundManager.playSe('bonus_chance_lose');
  soundManager.fadeOutBgm(420, 'normal');
+ triggerCabinetEffect('flash-weak', 360);
  showBossBattle(c.boss, 'hit');
  state.challenge = null;
  clearPrizeScene();
@@ -1621,10 +1854,12 @@ function finishChallengeFail(c){
  setHero('down');
  setEnemies('walk');
  pushHistory('CHANCE FAIL', 0);
- timers.challenge = setTimeout(()=>{ clearBossBattle(); randomizeActors(); playEffect('idle',''); update(); }, c.boss.expect >= 60 ? 900 : 420);
+ timers.challenge = setTimeout(()=>{ clearBossBattle(); setCabinetMode(state.door > 0 ? 'survive' : 'normal'); randomizeActors(); playEffect('idle',''); update(); }, c.boss.expect >= 60 ? 900 : 420);
  update();
 }
 function startChallengeRevive(c){
+ setPushGlow(false);
+ triggerCabinetEffect('blackout-on', 760);
  soundManager.duck(380, 0);
  soundManager.playSe('revive');
  setHeroCostume(c.boss.expect >= 75 || state.contradiction ? 'kimono' : 'nurse');
@@ -1658,12 +1893,13 @@ function advanceChallenge(source='auto'){
  }
  if(c.step === 3){
    if(c.pushPrompt){
-     c.awaitingPush = true;
-     showBossBattle(c.boss, c.boss.expect >= 75 ? 'attack' : 'intro');
+   c.awaitingPush = true;
+   setPushGlow(true);
+   showBossBattle(c.boss, c.boss.expect >= 75 ? 'attack' : 'intro');
      soundManager.playSe('push_notice');
      soundManager.duck(480, .12);
      setLcdMood(c.boss.expect >= 75 ? 'survive' : 'push', 1600);
-     timers.challenge = setTimeout(()=>{ if(state.challenge?.awaitingPush){ state.challenge.awaitingPush = false; advanceChallenge('auto'); } }, 1600);
+   timers.challenge = setTimeout(()=>{ if(state.challenge?.awaitingPush){ state.challenge.awaitingPush = false; setPushGlow(false); advanceChallenge('auto'); } }, 1600);
    }else{
      if(c.boss.expect >= 75) setHeroCostume('kimono');
      setLcdMood(c.boss.expect >= 75 ? 'survive' : 'shadow', challengeDelay(c, 560));
@@ -1744,6 +1980,52 @@ function lineMatchesSymbols(result, symbols){
  if(!result?.grid || !result?.line?.rows?.length || !symbols) return false;
  return result.line.rows.every((row, reelIndex) => result.grid[reelIndex]?.[row] === symbols[reelIndex]);
 }
+function gridHasSymbolsOnPayLine(result, symbols){
+ if(!result?.grid || !symbols) return false;
+ return payLines.some(line => line.rows.every((row, reelIndex) => result.grid[reelIndex]?.[row] === symbols[reelIndex]));
+}
+function matchedReachMeName(symbols){
+ const hit = reachMePatterns.find(p => p.symbols.every((symbol, i) => symbol === symbols[i]));
+ return hit?.name || '-';
+}
+function analyzeStopResult(result){
+ const debug = createStopDebug();
+ const previous = state.stopDebug || {};
+ debug.slipCountLeft = previous.slipCountLeft || 0;
+ debug.slipCountCenter = previous.slipCountCenter || 0;
+ debug.slipCountRight = previous.slipCountRight || 0;
+ debug.avoidedCherrySuikaOnMiss = !!previous.avoidedCherrySuikaOnMiss;
+ debug.bonusAimAssist = !!(previous.bonusAimAssist || result?.bonusAimAssist);
+ debug.currentRole = result?.role || '-';
+ debug.pendingBonus = state.pendingBonus || '-';
+ debug.currentBonusType = result?.bonus || result?.bonusReady || result?.hiddenBonus || state.pendingBonus || '-';
+ const center = result?.center || ['-','-','-'];
+ debug.centerStopSymbols = center.join(' / ');
+ debug.leftStopSymbol = center[0] || '-';
+ debug.isReachMe = !!result?.isReachMe || matchedReachMeName(center) !== '-';
+ debug.reachMeName = result?.reachMeName || matchedReachMeName(center);
+ if(center[0] === 'cherry'){
+   debug.isStrongCherry = center[1] === 'cherry' && center[2] === 'cherry';
+   debug.isWeakCherry = center[1] === 'cherry' && center[2] !== 'cherry';
+   debug.isSingleCherry = center[1] !== 'cherry' && center[2] !== 'cherry';
+   debug.roleStrength = debug.isSingleCherry ? 'CHERRY_SINGLE' : debug.isStrongCherry ? 'CHERRY_STRONG' : debug.isWeakCherry ? 'CHERRY_WEAK' : 'CHERRY';
+ }else if(center[0] === 'suika'){
+   debug.isWeakSuika = center[1] === 'suika' && center[2] === 'suika';
+   debug.isSpecialSuika = center.includes('hero');
+   debug.isStrongSuika = !debug.isWeakSuika && !debug.isSpecialSuika && center[1] === 'suika';
+   debug.roleStrength = debug.isSpecialSuika ? 'SUIKA_SPECIAL' : debug.isStrongSuika ? 'SUIKA_STRONG' : debug.isWeakSuika ? 'SUIKA_WEAK' : 'SUIKA_CHANCE';
+ }else if(center.includes('hero')){
+   debug.roleStrength = result?.roleStrength || 'HERO_CHANCE';
+ }else if(debug.isReachMe){
+   debug.roleStrength = 'REACH_ME';
+ }else{
+   debug.roleStrength = result?.roleStrength || '-';
+ }
+ debug.displayedRole = result?.displayedRole || debug.roleStrength || debug.currentRole;
+ debug.stopResult = debug.isReachMe ? `REACH:${debug.reachMeName}` : debug.roleStrength !== '-' ? debug.roleStrength : debug.currentRole;
+ state.stopDebug = debug;
+ return debug;
+}
 function settleDelay(result){
  if(result?.bonus || result?.bonusReady || result?.hiddenBonus || result?.challenge) return .6 * 1000;
  if(['CHERRY','SUIKA','HERO'].includes(result?.role)) return 350;
@@ -1809,8 +2091,10 @@ function scheduleBonusNotice(bonus, preferredType=null){
 
 function settle(){
  const r=applyActualStops(state.result); state.spinning=false; state.settling=false; state.pay=r.pay||0;
+ const stopDebug = analyzeStopResult(r);
  if(r.bonusGame){
    soundManager.playSe('payout');
+   triggerCabinetEffect('payout', 420);
    state.bet=0;
    state.credit+=state.pay;
    state.diff+=state.pay;
@@ -1824,12 +2108,15 @@ function settle(){
    return;
  }
  if(r.role==='REPLAY')state.bet=3; else state.bet=0;
- const roleHit = lineMatchesSymbols(r, getRoleSymbols(r.role));
+ const roleHit = r.role === 'CHERRY' ? r.center?.[0] === 'cherry' : r.role === 'SUIKA' ? stopDebug.isWeakSuika : lineMatchesSymbols(r, getRoleSymbols(r.role));
+ const pendingReadyHit = state.pendingBonus && gridHasSymbolsOnPayLine(r, bonusInfo[state.pendingBonus].center);
  const contradiction = hasContradiction(state.presentation, r.role, r.bonus || r.bonusReady || r.hiddenBonus);
  state.contradiction = contradiction;
  if(contradiction || isBonusExpectation(r)) soundManager.duck(520, .04);
  if(r.role==='REPLAY' && !roleHit) state.bet=0;
  if(r.role==='BELL' && roleHit)state.bell++;
+ if(r.role === 'CHERRY' && roleHit) state.pay = Math.max(state.pay, 2);
+ if(r.role === 'SUIKA' && !stopDebug.isWeakSuika) state.pay = 0;
  if(getRoleSymbols(r.role) && !roleHit) state.pay = 0;
  if(!r.bonus && !r.bonusReady && !r.challenge){
    if(['CHERRY','SUIKA','HERO'].includes(r.role) && roleHit) soundManager.playSe('rare');
@@ -1838,7 +2125,11 @@ function settle(){
  if(state.presentation === 'warning') soundManager.playSe('warning');
  if(state.presentation === 'survive') soundManager.playSe('survive');
  if(contradiction) setLcdMood('silentContradiction', 1200);
- const prizeShown = shouldRevealPrize(r) && (!getRoleSymbols(r.role) || roleHit) && !contradiction;
+ if(stopDebug.isReachMe) triggerCabinetEffect('reachme-hint', 760);
+ if(['CHERRY','SUIKA','HERO'].includes(r.role) && roleHit) cabinetRareEffect(stopDebug, r);
+ else if(state.pay > 0) triggerCabinetEffect('payout', 460);
+ const bonusReadyHitNow = r.bonusReady && gridHasSymbolsOnPayLine(r, bonusInfo[r.bonusReady].center);
+ const prizeShown = !pendingReadyHit && shouldRevealPrize(r) && (!r.bonusReady || bonusReadyHitNow) && (!getRoleSymbols(r.role) || roleHit) && !contradiction;
  if(prizeShown){
    revealPrizeScene(r);
  }else{
@@ -1853,20 +2144,29 @@ function settle(){
      playEffect('idle', '');
    }
  }
- if(r.bonusReady){
-   const readyHit = lineMatchesSymbols(r, bonusInfo[r.bonusReady].center);
+ if(pendingReadyHit && !r.bonus && !r.bonusReady){
+   state.bonusReady = true;
+   showBonusConfirm();
+   soundManager.playSe('bonus_confirm');
+   triggerCabinetEffect('flash-strong', 760);
+   setCabinetMode('bonus-confirm');
+   pushHistory(`${bonusInfo[state.pendingBonus].label}揃い`, 0);
+   autoStartBonusAfterReady(520);
+}else if(r.bonusReady){
+   const readyHit = bonusReadyHitNow;
    state.bonusReady = readyHit;
    if(readyHit) showBonusConfirm();
    else showBonusConfirm();
    if(readyHit) soundManager.playSe('bonus_confirm');
+   if(readyHit){ triggerCabinetEffect('flash-strong', 760); setCabinetMode('bonus-confirm'); }
    pushHistory(`${bonusInfo[r.bonusReady].label}${lineText(r)} ${readyHit ? 'READY' : 'MISS'}`, 0);
    if(readyHit) autoStartBonusAfterReady();
  }else if(r.bonus){
    state.credit+=state.pay; state.diff+=state.pay;
    state.pendingBonus = r.bonus;
-   state.bonusReady = lineMatchesSymbols(r, bonusInfo[r.bonus].center);
+   state.bonusReady = gridHasSymbolsOnPayLine(r, bonusInfo[r.bonus].center);
    pushHistory(`${r.role}${lineText(r)}+${bonusInfo[r.bonus].label}${state.presentation === 'freeze' ? ' LONG FREEZE' : ''}`, state.pay);
-   if(state.bonusReady) autoStartBonusAfterReady(1100);
+   if(state.bonusReady){ triggerCabinetEffect('flash-strong', 760); setCabinetMode('bonus-confirm'); autoStartBonusAfterReady(1100); }
    if(state.presentation === 'freeze'){
      startLongFreeze(r.bonus);
    }else{
@@ -1895,6 +2195,8 @@ function startBonus(){
  clearBossBattle();
  clearPrizeScene();
  clearBonusConfirm();
+ clearCabinetEffects({keepMode:false});
+ setCabinetMode('bonus');
  const type = state.pendingBonus;
  const info = bonusInfo[type];
  state.pay = 0;
@@ -1923,9 +2225,11 @@ function finishBonus(){
    state.doorHits++;
    setStageByKey('office');
    soundManager.switchBgm('rush', true);
+   setCabinetMode('survive');
  }else{
    setStageByKey('station');
    soundManager.fadeOutBgm(500, 'normal');
+   setCabinetMode('normal');
  }
  randomizeActors();
  playEffect(type === 'REG' ? 'bonus' : 'door', type !== 'REG' ? `SURVIVE ${state.door}` : 'REG END');
@@ -1944,8 +2248,9 @@ function update(){
  soundManager.ensureContextualBgm();
  updateHeroRuntimeDebug();
  updateSoundDebug();
+ updateCabinetDebug();
 }
-function reset(){ soundManager.stopReelLoop(); soundManager.fadeOutBgm(240, 'normal'); Object.assign(state,{credit:50,bet:0,pay:0,diff:0,games:0,big:0,reg:0,sbb:0,bell:0,spinning:false,stopped:[true,true,true],result:null,center:['blue7','bell','cherry'],history:[],stage:0,pendingBonus:null,bonusReady:false,door:0,doorHits:0,presentation:'idle',currentSceneCategory:'idle',currentDropSymbol:'-',currentEnemyAction:'idle',currentBossPhase:'-',currentBossAction:'-',heroCostume:'school',heroAction:'idle',heroFrameIndex:0,heroFrameTotal:1,heroFramePath:'assets/sprites/hero/school/00.png',heroLoadStatus:'OK',quietGames:0,contradiction:false,settling:false,performancePhase:0,awaitingPushNotice:null,nextGameNotice:null,challenge:null,bonusActive:null,reelBases:[0,0,0],stopIndices:[0,0,0],spinStartedAt:0,longFreeze:false,forceLongFreeze:false}); clearPrizeScene(); clearBossBattle(); clearBonusConfirm(); clearLongFreeze(); clearBonusLcd(); clearLcdMood(); randomizeActors(); setStage(0); playEffect('idle',''); setCenter(state.center); update(); }
+function reset(){ soundManager.stopReelLoop(); soundManager.fadeOutBgm(240, 'normal'); Object.assign(state,{credit:50,bet:0,pay:0,diff:0,games:0,big:0,reg:0,sbb:0,bell:0,spinning:false,stopped:[true,true,true],result:null,center:['blue7','bell','cherry'],history:[],stage:0,pendingBonus:null,bonusReady:false,door:0,doorHits:0,presentation:'idle',currentSceneCategory:'idle',currentDropSymbol:'-',currentEnemyAction:'idle',currentBossPhase:'-',currentBossAction:'-',heroCostume:'school',heroAction:'idle',heroFrameIndex:0,heroFrameTotal:1,heroFramePath:'assets/sprites/hero/school/00.png',heroLoadStatus:'OK',quietGames:0,contradiction:false,settling:false,performancePhase:0,awaitingPushNotice:null,nextGameNotice:null,challenge:null,bonusActive:null,reelBases:[0,0,0],stopIndices:[0,0,0],spinStartedAt:0,longFreeze:false,forceLongFreeze:false,currentCabinetMode:'normal',lastCabinetEffect:'-',cabinetBlackoutActive:false,pushGlowActive:false,stopDebug:createStopDebug()}); clearCabinetEffects({keepMode:false}); setCabinetMode('normal'); clearPrizeScene(); clearBossBattle(); clearBonusConfirm(); clearLongFreeze(); clearBonusLcd(); clearLcdMood(); randomizeActors(); setStage(0); playEffect('idle',''); setCenter(state.center); update(); }
 function rand(n){return Math.floor(Math.random()*n)}
 function heroDebugFrames(){
  return heroFramePaths(heroDebugState.action, heroDebugState.costume);
@@ -2019,6 +2324,7 @@ function updateHeroRuntimeDebug(){
  const role = state.result?.role || '-';
  const boss = state.challenge?.boss?.label || '-';
  const bonusHint = !!(state.result?.bonus || state.result?.bonusReady || state.result?.hiddenBonus || state.pendingBonus || state.awaitingPushNotice || state.nextGameNotice);
+ const stop = state.stopDebug || createStopDebug();
  info.innerHTML = [
    ['currentSceneCategory', state.currentSceneCategory || '-'],
    ['currentHeroCostume', state.heroCostume],
@@ -2038,6 +2344,26 @@ function updateHeroRuntimeDebug(){
    ['currentBossAction', state.currentBossAction || '-'],
    ['isPushActive', String(!!state.challenge?.awaitingPush || !!state.awaitingPushNotice)],
    ['reviveCandidate', String(!!state.challenge?.revive)],
+   ['displayedRole', stop.displayedRole || '-'],
+   ['roleStrength', stop.roleStrength || '-'],
+   ['pendingBonus', stop.pendingBonus || state.pendingBonus || '-'],
+   ['currentBonusType', stop.currentBonusType || '-'],
+   ['leftStopSymbol', stop.leftStopSymbol || '-'],
+   ['centerStopSymbols', stop.centerStopSymbols || '-'],
+   ['stopResult', stop.stopResult || '-'],
+   ['isReachMe', String(!!stop.isReachMe)],
+   ['reachMeName', stop.reachMeName || '-'],
+   ['isSingleCherry', String(!!stop.isSingleCherry)],
+   ['isWeakCherry', String(!!stop.isWeakCherry)],
+   ['isStrongCherry', String(!!stop.isStrongCherry)],
+   ['isWeakSuika', String(!!stop.isWeakSuika)],
+   ['isStrongSuika', String(!!stop.isStrongSuika)],
+   ['isSpecialSuika', String(!!stop.isSpecialSuika)],
+   ['slipCountLeft', stop.slipCountLeft ?? 0],
+   ['slipCountCenter', stop.slipCountCenter ?? 0],
+   ['slipCountRight', stop.slipCountRight ?? 0],
+   ['avoidedCherrySuikaOnMiss', String(!!stop.avoidedCherrySuikaOnMiss)],
+   ['bonusAimAssist', String(!!stop.bonusAimAssist)],
    ['liveFrame', `${(state.heroFrameIndex || 0) + 1} / ${state.heroFrameTotal || 1}`],
    ['livePath', state.heroFramePath || '-'],
    ['liveLoad', state.heroLoadStatus || '-']
@@ -2100,6 +2426,22 @@ function initSoundDebugPanel(){
  $('#soundDebugToggle')?.addEventListener('click', () => soundManager.setMuted(!soundManager.getState().muted));
  updateSoundDebug();
 }
+function initCabinetDebugPanel(){
+ const root = $('#cabinetDebugPanel');
+ if(!root || root.dataset.ready) return;
+ root.dataset.ready = '1';
+ root.querySelectorAll('[data-cabinet-effect]').forEach(btn => btn.addEventListener('click', () => {
+   const effect = btn.dataset.cabinetEffect;
+   if(effect === 'clear') clearCabinetEffects({keepMode:false});
+   else if(effect === 'push') setPushGlow(!state.pushGlowActive);
+   else if(effect.startsWith('stop')) pulseStopButton(Number(effect.slice(-1)) - 1);
+   else if(effect === 'bonus-chance') setCabinetMode('bonus-chance');
+   else if(effect === 'bonus-confirm') setCabinetMode('bonus-confirm');
+   else triggerCabinetEffect(effect, effect === 'blackout-on' ? 700 : 900);
+   updateCabinetDebug();
+ }));
+ updateCabinetDebug();
+}
 function renderDebugTools(){
  if(!document.body.classList.contains('debug-position') || $('#reelExportBtn')) return;
  const panel = $('#subPanel');
@@ -2125,11 +2467,30 @@ function renderDebugTools(){
    <div class="sound-debug-grid">${['bet','bonus_confirm','bonus_confirm2','freeze','hit','item','lever','moan','run','shoot','stage_change','stop','zombie_die','stop1','stop2','stop3','reel_start','reel_loop'].map(name=>`<button type="button" data-se-test="${name}">${name}</button>`).join('')}</div>
    <h3>Status</h3>
    <dl id="soundDebugInfo" class="hero-debug-info"></dl>
+ </section>
+ <section class="card debug-tools sound-debug" id="cabinetDebugPanel">
+   <h2>Cabinet Effect Debug</h2>
+   <div class="sound-debug-grid">
+     <button type="button" data-cabinet-effect="flash-weak">weak flash</button>
+     <button type="button" data-cabinet-effect="flash-strong">strong flash</button>
+     <button type="button" data-cabinet-effect="blackout-on">blackout</button>
+     <button type="button" data-cabinet-effect="reachme-hint">reachme hint</button>
+     <button type="button" data-cabinet-effect="bonus-chance">bonus chance</button>
+     <button type="button" data-cabinet-effect="bonus-confirm">bonus confirm</button>
+     <button type="button" data-cabinet-effect="push">push glow</button>
+     <button type="button" data-cabinet-effect="stop1">stop1 glow</button>
+     <button type="button" data-cabinet-effect="stop2">stop2 glow</button>
+     <button type="button" data-cabinet-effect="stop3">stop3 glow</button>
+     <button type="button" data-cabinet-effect="clear">clear effects</button>
+   </div>
+   <h3>Status</h3>
+   <dl id="cabinetDebugInfo" class="hero-debug-info"></dl>
  </section>`);
  $('#forceLongFreezeBtn').addEventListener('click', reserveLongFreeze);
  $('#reelExportBtn').addEventListener('click', exportReelStripImages);
  initHeroDebugPanel();
  initSoundDebugPanel();
+ initCabinetDebugPanel();
 }
 function loadImage(src){
  return new Promise((resolve, reject) => {
