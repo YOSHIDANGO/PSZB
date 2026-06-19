@@ -31,6 +31,28 @@ const chancePatterns = [
 ];
 const REEL_STEP_MS = 70;
 const MAX_SLIP = 4;
+const LONG_FREEZE_BLACKOUT_MS = 3000;
+const LONG_FREEZE_MOVIE_MS = 14000;
+const performanceExpect = {
+  idle:.01,
+  enemy_walk:.03,
+  hero_run:.06,
+  item_get:.04,
+  ammo_event:.12,
+  cherry_notice:.15,
+  shadow:.25,
+  warning:.40,
+  survive:.75,
+  silent:.02,
+  silentContradiction:.90
+};
+const bonusNoticeWeights = [
+  {type:'instant', weight:30},
+  {type:'push', weight:25},
+  {type:'delayed', weight:20},
+  {type:'next', weight:15},
+  {type:'weird', weight:10}
+];
 
 const bonusTable = {
   1:{solo:1/430, bell:1/8.45, regBias:.27, sbb:.16, blueBias:.43},
@@ -71,6 +93,8 @@ const backgrounds = [
 
 const hero = {
  school:['assets/sprites/hero/school/00.png','assets/sprites/hero/school/01.png','assets/sprites/hero/school/02.png','assets/sprites/hero/school/03.png','assets/sprites/hero/school/04.png','assets/sprites/hero/school/05.png','assets/sprites/hero/school/06.png','assets/sprites/hero/school/07.png','assets/sprites/hero/school/08.png','assets/sprites/hero/school/09.png','assets/sprites/hero/school/10.png'],
+ nurse:['assets/sprites/hero/nurse/00.png','assets/sprites/hero/nurse/01.png','assets/sprites/hero/nurse/02.png','assets/sprites/hero/nurse/03.png','assets/sprites/hero/nurse/04.png','assets/sprites/hero/nurse/05.png','assets/sprites/hero/nurse/06.png','assets/sprites/hero/nurse/07.png','assets/sprites/hero/nurse/08.png','assets/sprites/hero/nurse/09.png','assets/sprites/hero/nurse/10.png'],
+ kimono:['assets/sprites/hero/kimono/00.png','assets/sprites/hero/kimono/01.png','assets/sprites/hero/kimono/02.png','assets/sprites/hero/kimono/03.png','assets/sprites/hero/kimono/04.png','assets/sprites/hero/kimono/05.png','assets/sprites/hero/kimono/06.png','assets/sprites/hero/kimono/07.png','assets/sprites/hero/kimono/08.png','assets/sprites/hero/kimono/09.png','assets/sprites/hero/kimono/10.png'],
  rush:['assets/sprites/hero/rush/00.png','assets/sprites/hero/rush/01.png','assets/sprites/hero/rush/02.png','assets/sprites/hero/rush/03.png','assets/sprites/hero/rush/04.png','assets/sprites/hero/rush/05.png','assets/sprites/hero/rush/06.png','assets/sprites/hero/rush/07.png','assets/sprites/hero/rush/08.png','assets/sprites/hero/rush/09.png','assets/sprites/hero/rush/10.png']
 };
 const bonusBackgrounds = {
@@ -80,7 +104,7 @@ const bonusBackgrounds = {
   BB_BLUE:'assets/lcd/bonus-big-bg.png',
   REG:'assets/lcd/bonus-reg-bg.png'
 };
-const enemyNames = ['highschool_girl','boy_student','cabaret_girl','clerk','college_girl','courier','female_teacher','gal','girl_gym','girl_uniform','security_guard','housewife','influencer','model','office_lady','passenger','receptionist','salaryman','secretary','zombie_default','shopper','station_staff','yankee_boy','yankee_girl'];
+const enemyNames = ['highschool_girl','boy_student','cabaret_girl','clerk','college_girl','courier','female_teacher','gal','girl_gym','girl_uniform','security_guard','housewife','influencer','model','office_lady','passenger','receptionist','salaryman','secretary','shopper','station_staff','yankee_boy','yankee_girl'];
 const enemyFrames = Object.fromEntries(enemyNames.map(n => [n, Array.from({length:8},(_,i)=>`assets/sprites/enemies/${n}/${String(i).padStart(2,'0')}.png`)]));
 const bossDefs = [
  {key:'security', label:'SECURITY CAPTAIN', src:'assets/sprites/bosses/security_captain_boss.png', expect:25},
@@ -95,7 +119,19 @@ const state = {
   credit:50, bet:0, pay:0, diff:0, games:0, big:0, reg:0, sbb:0, bell:0, spinning:false,
   stopped:[true,true,true], result:null, center:['blue7','bell','cherry'], history:[], stage:0,
   enemyA:'highschool_girl', enemyB:'salaryman', pendingBonus:null, bonusReady:false, setting:1, door:0, doorHits:0,
-  presentation:'crate', challenge:null, bonusActive:null, reelBases:[0,0,0], stopIndices:[0,0,0], spinStartedAt:0, longFreeze:false, forceLongFreeze:false
+  presentation:'idle', heroCostume:'school', heroAction:'idle', heroFrameIndex:0, heroFrameTotal:1, heroFramePath:'assets/sprites/hero/school/00.png', heroLoadStatus:'OK',
+  quietGames:0, contradiction:false, settling:false, performancePhase:0, awaitingPushNotice:null, nextGameNotice:null,
+  challenge:null, bonusActive:null, reelBases:[0,0,0], stopIndices:[0,0,0], spinStartedAt:0, longFreeze:false, forceLongFreeze:false
+};
+
+const heroDebugState = {
+  costume:'school',
+  action:'idle',
+  frame:0,
+  fps:4,
+  playing:false,
+  status:'READY',
+  timer:null
 };
 
 const els = {
@@ -109,22 +145,283 @@ const els = {
 
 const timers = {};
 function clearAnim(name){ if(timers[name]){ clearInterval(timers[name]); timers[name] = null; } }
+function clearTimer(name){ if(timers[name]){ clearTimeout(timers[name]); timers[name] = null; } }
+const soundManager = (() => {
+ const bgmPaths = {
+   normal:'assets/audio/normal.mp3',
+   boss:'assets/audio/boss.mp3',
+   rush:'assets/audio/rush.mp3'
+ };
+ const seTones = {
+   bet:[520,.045,'square',.32], lever:[180,.07,'sawtooth',.38], reel_start:[260,.08,'triangle',.34],
+   stop1:[360,.04,'square',.34], stop2:[400,.04,'square',.34], stop3:[450,.05,'square',.36],
+   payout:[700,.06,'sine',.42], rare:[880,.12,'triangle',.62], warning:[120,.22,'sawtooth',.74],
+   survive:[180,.28,'sawtooth',.78], push_notice:[980,.09,'triangle',.7], push:[620,.06,'square',.55],
+   bonus_confirm:[1040,.45,'triangle',.86], bonus_start:[760,.22,'sawtooth',.76],
+   bonus_chance_start:[160,.28,'sawtooth',.72], bonus_chance_win:[920,.34,'triangle',.82],
+   bonus_chance_lose:[110,.25,'sawtooth',.5], revive:[720,.42,'triangle',.86], freeze:[55,.8,'sawtooth',.8],
+   hit:[140,.1,'sawtooth',.58], attack:[260,.08,'square',.58], shoot:[1250,.055,'square',.64], bat_attack:[300,.075,'square',.62]
+ };
+ const data = {
+   unlocked:false,
+   muted:localStorage.getItem('dieYetSoundMuted') === '1',
+   volume:Number(localStorage.getItem('dieYetSoundVolume') || .7),
+   bgmVolume:.45,
+   seVolume:.7,
+   currentBgmName:null,
+   desiredBgm:null,
+   bgm:{},
+   ctx:null,
+   reelLoop:null,
+   fadeTimer:null,
+   duckTimer:null
+ };
+ Object.entries(bgmPaths).forEach(([name, src]) => {
+   const audio = new Audio(src);
+   audio.loop = true;
+   audio.preload = 'auto';
+   audio.addEventListener('error', () => console.warn(`[sound] BGM load failed: ${src}`));
+   data.bgm[name] = audio;
+ });
+ function ctx(){
+   if(data.ctx) return data.ctx;
+   const Ctx = window.AudioContext || window.webkitAudioContext;
+   if(!Ctx) return null;
+   data.ctx = new Ctx();
+   return data.ctx;
+ }
+ function effectiveVolume(kind='se'){
+   if(data.muted) return 0;
+   return data.volume * (kind === 'bgm' ? data.bgmVolume : data.seVolume);
+ }
+ function applyBgmVolume(){
+   Object.values(data.bgm).forEach(audio => { audio.volume = effectiveVolume('bgm'); });
+ }
+ function updateUi(){
+   const toggle = $('#soundToggle');
+   const slider = $('#soundVolume');
+   if(toggle) toggle.textContent = data.muted ? 'SOUND OFF' : (data.unlocked ? 'SOUND ON' : 'SOUND READY');
+   if(slider) slider.value = String(Math.round(data.volume * 100));
+   updateSoundDebug();
+ }
+ async function unlockAudio(){
+   if(data.unlocked) return true;
+   const c = ctx();
+   try{
+     if(c?.state === 'suspended') await c.resume();
+     data.unlocked = true;
+     applyBgmVolume();
+     if(data.desiredBgm) playBgm(data.desiredBgm);
+     else ensureContextualBgm();
+     updateUi();
+     return true;
+   }catch(e){
+     console.warn('[sound] unlock failed', e);
+     return false;
+   }
+ }
+ function playBgm(name){
+   data.desiredBgm = name;
+   if(!bgmPaths[name]) return;
+   if(!data.unlocked || data.muted) { updateUi(); return; }
+   if(data.currentBgmName === name && !data.bgm[name].paused) return;
+   stopBgm(false);
+   const audio = data.bgm[name];
+   data.currentBgmName = name;
+   audio.loop = true;
+   audio.currentTime = 0;
+   audio.volume = effectiveVolume('bgm');
+   audio.play().catch(e => console.warn(`[sound] BGM play failed: ${bgmPaths[name]}`, e));
+   updateUi();
+ }
+ function stopBgm(clearDesired=true){
+   clearInterval(data.fadeTimer);
+   data.fadeTimer = null;
+   Object.values(data.bgm).forEach(audio => { audio.pause(); audio.currentTime = 0; });
+   data.currentBgmName = null;
+   if(clearDesired) data.desiredBgm = null;
+   updateUi();
+ }
+ function fadeOutBgm(ms=600, next=null){
+   clearInterval(data.fadeTimer);
+   const audio = data.currentBgmName ? data.bgm[data.currentBgmName] : null;
+   if(!audio || audio.paused){ if(next) playBgm(next); return; }
+   const start = audio.volume;
+   const steps = Math.max(1, Math.round(ms / 50));
+   let tick = 0;
+   data.fadeTimer = setInterval(() => {
+     tick++;
+     audio.volume = Math.max(0, start * (1 - tick / steps));
+     if(tick >= steps){
+       clearInterval(data.fadeTimer);
+       data.fadeTimer = null;
+       stopBgm(false);
+       if(next) playBgm(next);
+     }
+   }, 50);
+ }
+ function switchBgm(name, fade=true){
+   data.desiredBgm = name;
+   if(data.currentBgmName === name){
+     if(data.bgm[name]?.paused) playBgm(name);
+     return;
+   }
+   if(fade && data.currentBgmName) fadeOutBgm(500, name);
+   else playBgm(name);
+ }
+ function tone(freq, duration, type='sine', vol=.5, delay=0){
+   const c = ctx();
+   if(!c || !data.unlocked || data.muted) return;
+   const osc = c.createOscillator();
+   const gain = c.createGain();
+   const now = c.currentTime + delay;
+   osc.type = type;
+   osc.frequency.setValueAtTime(freq, now);
+   gain.gain.setValueAtTime(0.0001, now);
+   gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, effectiveVolume('se') * vol), now + .01);
+   gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+   osc.connect(gain).connect(c.destination);
+   osc.start(now);
+   osc.stop(now + duration + .03);
+ }
+ function playSe(name){
+   if(!data.unlocked || data.muted) return;
+   const t = seTones[name] || seTones.push;
+   tone(t[0], t[1], t[2], t[3]);
+   if(name === 'bonus_confirm'){ tone(t[0] * 1.25, .28, t[2], t[3] * .75, .16); tone(t[0] * 1.5, .22, 'sine', t[3] * .55, .34); }
+   if(name === 'rare' || name === 'survive'){ tone(t[0] * .5, t[1] * .85, 'sawtooth', t[3] * .45, .04); }
+ }
+ function startReelLoop(){
+   const c = ctx();
+   if(!c || data.reelLoop || !data.unlocked || data.muted) return;
+   const osc = c.createOscillator();
+   const gain = c.createGain();
+   osc.type = 'sawtooth';
+   osc.frequency.value = 96;
+   gain.gain.value = effectiveVolume('se') * .25;
+   osc.connect(gain).connect(c.destination);
+   osc.start();
+   data.reelLoop = {osc, gain};
+   updateUi();
+ }
+ function stopReelLoop(){
+   if(!data.reelLoop) return;
+   try{ data.reelLoop.gain.gain.exponentialRampToValueAtTime(.0001, ctx().currentTime + .08); data.reelLoop.osc.stop(ctx().currentTime + .1); }catch(e){}
+   data.reelLoop = null;
+   updateUi();
+ }
+ function duck(ms=450, scale=.18){
+   clearTimeout(data.duckTimer);
+   Object.values(data.bgm).forEach(audio => { audio.volume = effectiveVolume('bgm') * scale; });
+   data.duckTimer = setTimeout(applyBgmVolume, ms);
+ }
+ function setMuted(flag){
+   data.muted = !!flag;
+   localStorage.setItem('dieYetSoundMuted', data.muted ? '1' : '0');
+   applyBgmVolume();
+   if(data.muted){ stopReelLoop(); Object.values(data.bgm).forEach(a => a.pause()); }
+   else if(data.unlocked) ensureContextualBgm();
+   updateUi();
+ }
+ function setVolume(value){
+   data.volume = Math.max(0, Math.min(1, Number(value)));
+   localStorage.setItem('dieYetSoundVolume', String(data.volume));
+   applyBgmVolume();
+   if(data.reelLoop) data.reelLoop.gain.gain.value = effectiveVolume('se') * .25;
+   updateUi();
+ }
+ function ensureContextualBgm(){
+   if(!data.unlocked || data.muted) return;
+   if(state?.challenge) switchBgm('boss', true);
+   else if(state?.bonusActive || state?.door > 0) switchBgm('rush', true);
+   else if(state?.pendingBonus || state?.longFreeze) stopBgm(false);
+   else switchBgm('normal', true);
+ }
+ function getState(){
+   return {currentBgmName:data.currentBgmName || '-', desiredBgm:data.desiredBgm || '-', muted:data.muted, volume:data.volume, unlocked:data.unlocked, reelLoop:!!data.reelLoop};
+ }
+ return {unlockAudio, playBgm, stopBgm, fadeOutBgm, switchBgm, playSe, setMuted, setVolume, startReelLoop, stopReelLoop, duck, ensureContextualBgm, getState};
+})();
 function playFrames(img, frames, fps=8, name='anim', loop=true){
- clearAnim(name); if(!frames?.length) return; let i=0; img.src=frames[0];
+ clearAnim(name); if(!frames?.length) return; let i=0;
+ if(name === 'hero'){
+   img.onload = () => { state.heroLoadStatus = 'OK'; updateHeroRuntimeDebug(); };
+   img.onerror = () => { state.heroLoadStatus = 'FAILED'; updateHeroRuntimeDebug(); };
+ }
+ img.src=frames[0];
+ if(name === 'hero') setHeroFrameDebug(frames, i);
  if(frames.length <= 1) return;
  const interval = Math.max(60, Math.round(1000/fps));
- timers[name]=setInterval(()=>{ i++; if(i>=frames.length){ if(!loop){ i=frames.length-1; clearAnim(name); }else i=0; } img.src=frames[i]; }, interval);
+ timers[name]=setInterval(()=>{ i++; if(i>=frames.length){ if(!loop){ i=frames.length-1; clearAnim(name); }else i=0; } img.src=frames[i]; if(name === 'hero') setHeroFrameDebug(frames, i); }, interval);
 }
-function heroFrames(action){
- const b = hero.school;
- if(action==='idle') return [b[0]];
- if(action==='rush') return hero.rush;
- if(action==='run') return [b[1],b[2],b[3],b[4],b[3],b[2]].filter(Boolean);
- if(action==='melee') return [b[5],b[6],b[5],b[0]].filter(Boolean);
- if(action==='shoot') return [b[7],b[8],b[9],b[8]].filter(Boolean);
- if(action==='special') return [b[1],b[2],b[3],b[5],b[6],b[7],b[8],b[9]].filter(Boolean);
- if(action==='down') return [b[10]].filter(Boolean);
- return [b[0]];
+function costumeFrames(costume='school'){
+ return hero[costume] || hero.school;
+}
+function normalizeHeroAction(action='idle'){
+ const a = String(action || 'idle');
+ if(['idle','stand','wait'].includes(a)) return 'idle';
+ if(['run','walk','dash'].includes(a)) return 'run';
+ if(['bat_attack','attack','bat','swing','melee'].includes(a)) return 'bat_attack';
+ if(['shoot','gun','fire'].includes(a)) return 'shoot';
+ if(['hit','damage','hurt'].includes(a)) return 'hit';
+ if(['down','dead','knockout','lose'].includes(a)) return 'down';
+ return a;
+}
+function resolveHeroCostume(costume='school'){
+ return hero[costume] ? costume : 'school';
+}
+function heroFramePaths(action='idle', costume=state.heroCostume){
+ const resolvedCostume = resolveHeroCostume(costume);
+ const normalized = normalizeHeroAction(action);
+ const b = costumeFrames(resolvedCostume);
+ if(action === 'rush') return hero.rush;
+ if(action === 'special') return [b[1],b[2],b[3],b[5],b[6],b[7],b[8],b[9]].filter(Boolean);
+ if(normalized === 'idle') return [b[0]].filter(Boolean);
+ if(normalized === 'run') return [b[1],b[2],b[3],b[4],b[3],b[2]].filter(Boolean);
+ if(normalized === 'bat_attack') return [b[5],b[6],b[5],b[0]].filter(Boolean);
+ if(normalized === 'shoot') return [b[7],b[8]].filter(Boolean);
+ if(normalized === 'hit') return [b[9]].filter(Boolean);
+ if(normalized === 'down') return [b[10]].filter(Boolean);
+ return [b[0]].filter(Boolean);
+}
+function heroActionFps(action='idle'){
+ const normalized = normalizeHeroAction(action);
+ if(action === 'rush') return 11;
+ if(action === 'special') return 9;
+ if(normalized === 'run') return 8;
+ if(normalized === 'bat_attack') return 8;
+ if(normalized === 'shoot') return 7;
+ if(normalized === 'hit') return 7;
+ if(normalized === 'down') return 3;
+ return 3;
+}
+function setHeroFrameDebug(frames, index){
+ state.heroFrameIndex = index;
+ state.heroFrameTotal = frames.length;
+ state.heroFramePath = frames[index] || frames[0] || '';
+ state.heroLoadStatus = state.heroFramePath ? 'LOADING/OK' : 'NO FRAME';
+ updateHeroRuntimeDebug();
+}
+function chooseHeroCostume(performanceType, role, flags={}){
+ if(flags.sbb) return 'rush';
+ if(flags.contradiction) return weightedChoice([{value:'kimono',weight:55},{value:'nurse',weight:25},{value:'school',weight:20}]);
+ if(flags.bonusExpectation) return weightedChoice([{value:'school',weight:45},{value:'nurse',weight:25},{value:'kimono',weight:30}]);
+ if(flags.challengePrelude) return weightedChoice([{value:'school',weight:35},{value:'nurse',weight:25},{value:'kimono',weight:40}]);
+ if(performanceType === 'item_get' || performanceType === 'ammo_event') return weightedChoice([{value:'nurse',weight:62},{value:'school',weight:30},{value:'kimono',weight:8}]);
+ if(performanceType === 'shadow' || performanceType === 'warning' || performanceType === 'survive' || performanceType === 'silentContradiction') return weightedChoice([{value:'kimono',weight:64},{value:'nurse',weight:18},{value:'school',weight:18}]);
+ if(performanceType === 'cherry_notice') return weightedChoice([{value:'school',weight:48},{value:'nurse',weight:34},{value:'kimono',weight:18}]);
+ if(performanceType === 'silent' && flags.roleHit) return weightedChoice([{value:'kimono',weight:42},{value:'nurse',weight:26},{value:'school',weight:32}]);
+ if(['CHERRY','SUIKA','HERO'].includes(role)) return weightedChoice([{value:'school',weight:55},{value:'nurse',weight:30},{value:'kimono',weight:15}]);
+ if(['REPLAY','BELL'].includes(role)) return weightedChoice([{value:'school',weight:80},{value:'nurse',weight:18},{value:'kimono',weight:2}]);
+ if(flags.quietBreak) return weightedChoice([{value:'school',weight:58},{value:'nurse',weight:20},{value:'kimono',weight:22}]);
+ return weightedChoice([{value:'school',weight:95},{value:'nurse',weight:5}]);
+}
+function setHeroCostume(costume){
+ if(costume === 'rush' || hero[costume]) state.heroCostume = costume;
+ else state.heroCostume = 'school';
+}
+function heroFrames(action, costume=state.heroCostume){
+ return heroFramePaths(action, costume);
 }
 function enemySeq(name, action){
  const f = enemyFrames[name] || enemyFrames.highschool_girl;
@@ -137,7 +434,7 @@ function enemySeq(name, action){
 
 function init(){
   els.reels.forEach((reel,i)=>reel.innerHTML=`<div class="strip">${buildStrip(reelMap[i])}</div>`);
-  renderLegend(); renderStageButtons(); bind(); randomizeActors(); setStage(0); playEffect('miss','READY'); update(); requestAnimationFrame(()=>setCenter(state.center));
+  renderLegend(); renderStageButtons(); bind(); randomizeActors(); setStage(0); playEffect('idle',''); update(); requestAnimationFrame(()=>setCenter(state.center));
 }
 function symbolImgHtml(k, alt=symbolDefs[k].label){
  const s = symbolDefs[k];
@@ -145,21 +442,28 @@ function symbolImgHtml(k, alt=symbolDefs[k].label){
 }
 function buildStrip(arr){ return [...arr,...arr,...arr].map(k=>`<div class="symbol">${symbolImgHtml(k)}</div>`).join(''); }
 function bind(){
- $('#maxBetBtn').addEventListener('click', maxBet);
- $('#leverBtn').addEventListener('click', leverOn);
- $('#pushBtn').addEventListener('click', pushAction);
- document.querySelectorAll('.stop-hit').forEach(btn=>btn.addEventListener('click',()=>stopReel(Number(btn.dataset.stop))));
- $('#resetBtn').addEventListener('click', reset);
- $('#forceFreezeUiBtn')?.addEventListener('click', reserveLongFreeze);
+ const unlock = () => soundManager.unlockAudio();
+ document.addEventListener('pointerdown', unlock, {once:true});
+ document.addEventListener('keydown', unlock, {once:true});
+ $('#maxBetBtn').addEventListener('click', () => { soundManager.unlockAudio(); maxBet(); });
+ $('#leverBtn').addEventListener('click', () => { soundManager.unlockAudio(); leverOn(); });
+ $('#pushBtn').addEventListener('click', () => { soundManager.unlockAudio(); pushAction(); });
+ document.querySelectorAll('.stop-hit').forEach(btn=>btn.addEventListener('click',()=>{ soundManager.unlockAudio(); stopReel(Number(btn.dataset.stop)); }));
+ $('#resetBtn').addEventListener('click', () => { soundManager.unlockAudio(); reset(); });
+ $('#forceFreezeUiBtn')?.addEventListener('click', () => { soundManager.unlockAudio(); reserveLongFreeze(); });
+ $('#soundToggle')?.addEventListener('click', () => { soundManager.unlockAudio(); soundManager.setMuted(!soundManager.getState().muted); });
+ $('#soundVolume')?.addEventListener('input', e => { soundManager.setVolume(Number(e.target.value) / 100); });
  if(els.settingSelect){
    els.settingSelect.value = String(state.setting);
    els.settingSelect.addEventListener('change', e => { state.setting = Number(e.target.value); update(); });
  }
+ soundManager.setVolume(soundManager.getState().volume);
 }
 function reserveLongFreeze(){
  if(state.spinning || state.challenge || state.bonusActive || state.longFreeze) return;
  state.forceLongFreeze = true;
  clearBonusConfirm();
+ soundManager.playSe('warning');
  playEffect('special', 'NEXT FREEZE');
  pushHistory('DEBUG NEXT LONG FREEZE', 0);
  update();
@@ -201,11 +505,18 @@ function chooseRoamingStage(){
  return 0;
 }
 function randomizeActors(){ state.enemyA = enemyNames[rand(enemyNames.length)]; do{state.enemyB = enemyNames[rand(enemyNames.length)]}while(state.enemyB===state.enemyA); els.enemyA.classList.add('face-left'); els.enemyB.classList.add('face-left'); }
-function setHero(action){ const fps = action==='rush'?11:action==='special'?9:action==='shoot'?7:action==='melee'?8:action==='run'?8:3; playFrames(els.hero, heroFrames(action), fps, 'hero', true); }
+function setHero(action, costume=state.heroCostume){
+ const resolvedCostume = resolveHeroCostume(costume);
+ state.heroCostume = resolvedCostume;
+ state.heroAction = action === 'rush' || action === 'special' ? action : normalizeHeroAction(action);
+ playFrames(els.hero, heroFrames(action, resolvedCostume), heroActionFps(action), 'hero', true);
+ updateHeroRuntimeDebug();
+}
 function setEnemies(action){ const loop=action!=='down'; playFrames(els.enemyA, enemySeq(state.enemyA,action), action==='walk'?5:7, 'enemyA', loop); playFrames(els.enemyB, enemySeq(state.enemyB,action), action==='walk'?4:6, 'enemyB', loop); }
 function clearBossBattle(){
  if(!els.bossBattle) return;
  els.bossBattle.className = 'boss-battle';
+ clearTimer('challenge');
  if(els.lcdWindow) els.lcdWindow.classList.remove('boss-mode');
  if(els.bossSprite){
    els.bossSprite.style.backgroundImage = '';
@@ -218,6 +529,37 @@ function showBonusConfirm(){
 }
 function clearBonusConfirm(){
  if(els.lcdWindow) els.lcdWindow.classList.remove('bonus-confirm');
+}
+function clearLcdMood(){
+ if(!els.lcdWindow) return;
+ els.lcdWindow.classList.remove('notice-shadow','notice-warning','notice-survive','notice-cherry','notice-ammo','notice-silent','notice-weird','notice-push','notice-revive','notice-supply','notice-medkit','notice-kimono','notice-kimono-cut');
+}
+function setLcdMood(type, hold=900){
+ if(!els.lcdWindow) return;
+ clearLcdMood();
+ const map = {
+   shadow:'notice-shadow',
+   warning:'notice-warning',
+   survive:'notice-survive',
+   cherry_notice:'notice-cherry',
+   ammo_event:'notice-ammo',
+   silent:'notice-silent',
+   silentContradiction:'notice-weird',
+   push:'notice-push',
+   revive:'notice-revive',
+   supply_check:'notice-supply',
+   medkit_notice:'notice-medkit',
+   ammo_support:'notice-ammo',
+   comeback_hint:'notice-medkit',
+   silent_kimono:'notice-kimono',
+   kimono_shadow:'notice-kimono',
+   kimono_cut_in:'notice-kimono-cut',
+   kimono_turn:'notice-kimono',
+   kimono_survive:'notice-survive'
+ };
+ const cls = map[type];
+ if(cls) els.lcdWindow.classList.add(cls);
+ if(cls && hold) setTimeout(()=>els.lcdWindow?.classList.remove(cls), hold);
 }
 function setBonusLcd(type){
  if(!els.lcdWindow || !els.stageBg) return;
@@ -244,6 +586,9 @@ function clearBonusLcd(){
 }
 function startLongFreeze(bonus){
  if(!els.longFreeze) return false;
+ soundManager.stopReelLoop();
+ soundManager.fadeOutBgm(180);
+ soundManager.playSe('freeze');
  state.longFreeze = true;
  clearPrizeScene();
  clearBossBattle();
@@ -263,21 +608,27 @@ function startLongFreeze(bonus){
      video.currentTime = 0;
    }
    showBonusConfirm();
+   soundManager.playSe('bonus_confirm');
    playEffect('special', bonusInfo[bonus]?.badge || 'BONUS');
    update();
  };
  if(video){
    video.currentTime = 0;
    video.onended = null;
-   video.play().catch(()=>{});
+   video.muted = soundManager.getState().muted;
+   video.volume = soundManager.getState().volume;
  }
- setTimeout(()=>els.longFreeze?.classList.remove('blackout'), 900);
- setTimeout(finish, 14000);
+ setTimeout(()=>{
+   els.longFreeze?.classList.remove('blackout');
+   video?.play().catch(()=>{});
+ }, LONG_FREEZE_BLACKOUT_MS);
+ setTimeout(finish, LONG_FREEZE_BLACKOUT_MS + LONG_FREEZE_MOVIE_MS);
  update();
  return true;
 }
 function clearLongFreeze(){
  state.longFreeze = false;
+ soundManager.stopReelLoop();
  if(els.longFreeze) els.longFreeze.classList.remove('on','blackout');
  if(els.lcdWindow) els.lcdWindow.classList.remove('long-freeze-on');
  if(els.longFreezeVideo){
@@ -340,15 +691,27 @@ function revealPrizeScene(result){
    if(els.prizeScene) els.prizeScene.className = `prize-scene ${type} reveal${result.bonus ? ' bonus' : ''}`;
  }, revealDelay);
 }
+function weightedChoice(items){
+ const total = items.reduce((sum, item) => sum + item.weight, 0);
+ let r = Math.random() * total;
+ for(const item of items){
+   r -= item.weight;
+   if(r <= 0) return item.value;
+ }
+ return items.at(-1).value;
+}
 function choosePresentation(result){
- if(result?.challenge) return Math.random() < .62 ? 'horde' : 'drop';
  if(result?.forceLongFreeze) return 'freeze';
- if(result?.bonus && Math.random() < .35) return 'freeze';
- if(result?.bonus) return Math.random() < .55 ? 'horde' : 'drop';
- if(result?.role === 'REPLAY') return Math.random() < .55 ? 'horde' : 'crate';
- if(result?.role === 'BELL') return Math.random() < .55 ? 'crate' : 'drop';
- if(result?.role === 'CHERRY' || result?.role === 'SUIKA' || result?.role === 'HERO') return Math.random() < .7 ? 'drop' : 'horde';
- return Math.random() < .5 ? 'horde' : 'crate';
+ if(result?.challenge) return weightedChoice([{value:'warning',weight:45},{value:'shadow',weight:25},{value:'ammo_event',weight:15},{value:'cherry_notice',weight:15}]);
+ if(result?.bonus) return weightedChoice([{value:'survive',weight:22},{value:'warning',weight:28},{value:'shadow',weight:20},{value:'hero_run',weight:15},{value:'silent',weight:15}]);
+ const role = result?.role;
+ if(role === 'REPLAY') return weightedChoice([{value:'hero_run',weight:32},{value:'enemy_walk',weight:30},{value:'silent',weight:18},{value:'ammo_event',weight:8},{value:'item_get',weight:12}]);
+ if(role === 'BELL') return weightedChoice([{value:'item_get',weight:38},{value:'hero_run',weight:22},{value:'enemy_walk',weight:18},{value:'silent',weight:12},{value:'cherry_notice',weight:10}]);
+ if(role === 'CHERRY') return weightedChoice([{value:'cherry_notice',weight:45},{value:'warning',weight:22},{value:'shadow',weight:18},{value:'item_get',weight:8},{value:'silent',weight:7}]);
+ if(role === 'SUIKA') return weightedChoice([{value:'ammo_event',weight:42},{value:'warning',weight:26},{value:'shadow',weight:18},{value:'enemy_walk',weight:8},{value:'silent',weight:6}]);
+ if(role === 'HERO') return weightedChoice([{value:'shadow',weight:30},{value:'warning',weight:24},{value:'survive',weight:12},{value:'hero_run',weight:24},{value:'silent',weight:10}]);
+ if(state.quietGames >= 10) return weightedChoice([{value:'shadow',weight:34},{value:'enemy_walk',weight:28},{value:'warning',weight:12},{value:'hero_run',weight:16},{value:'silent',weight:10}]);
+ return weightedChoice([{value:'idle',weight:34},{value:'silent',weight:24},{value:'enemy_walk',weight:24},{value:'hero_run',weight:10},{value:'shadow',weight:5},{value:'warning',weight:3}]);
 }
 
 function shouldFakeChallenge(role){
@@ -447,53 +810,210 @@ function actorClasses(effect){
  else if(effect==='punch'){els.hero.classList.add('anim-attack');els.enemyA.classList.add('anim-attack');els.enemyB.classList.add('anim-walk')}
  else if(effect==='special'||effect==='bonus'){els.hero.classList.add('anim-special');els.enemyA.classList.add('anim-down');els.enemyB.classList.add('anim-down');flash()}
  else if(effect==='reveal'){els.hero.classList.add('anim-reveal');els.enemyA.classList.add('anim-walk');els.enemyB.classList.add('anim-walk')}
- else if(effect==='avoid'||effect==='item'||effect==='door'){els.hero.classList.add('anim-run');els.enemyA.classList.add('anim-walk');els.enemyB.classList.add('anim-walk')}
+ else if(effect==='hero_run'||effect==='avoid'||effect==='item'||effect==='door'){els.hero.classList.add('anim-run');els.enemyA.classList.add('anim-walk');els.enemyB.classList.add('anim-walk')}
+ else if(effect==='enemy_walk'){els.hero.classList.add('anim-idle');els.enemyA.classList.add('anim-walk');els.enemyB.classList.add('anim-walk')}
+ else if(effect==='shadow'||effect==='warning'||effect==='survive'){els.hero.classList.add('anim-reveal');els.enemyA.classList.add('anim-walk');els.enemyB.classList.add('anim-walk')}
+ else if(effect==='cherry_notice'){els.hero.classList.add('anim-reveal');els.enemyA.classList.add('anim-hit');els.enemyB.classList.add('anim-walk')}
+ else if(effect==='ammo_event'){els.hero.classList.add('anim-shoot');els.enemyA.classList.add('anim-walk');els.enemyB.classList.add('anim-walk')}
+ else if(effect==='supply_check'||effect==='medkit_notice'||effect==='ammo_support'||effect==='comeback_hint'){els.hero.classList.add('anim-reveal');els.enemyA.classList.add('anim-walk');els.enemyB.classList.add('anim-walk')}
+ else if(effect==='silent_kimono'||effect==='kimono_shadow'||effect==='kimono_cut_in'||effect==='kimono_turn'||effect==='kimono_survive'){els.hero.classList.add('anim-reveal');els.enemyA.classList.add('anim-walk');els.enemyB.classList.add('anim-walk')}
  else{els.hero.classList.add('anim-idle');els.enemyA.classList.add('anim-walk');els.enemyB.classList.add('anim-walk')}
 }
 function playEffect(effect,badge){
- els.lcdStatus.textContent=badge;
- els.lcdStatus.classList.toggle('empty', !badge);
+ if(!state.bonusActive && state.heroCostume === 'nurse' && effect === 'item') effect = 'supply_check';
+ if(!state.bonusActive && state.heroCostume === 'nurse' && effect === 'item_get') effect = 'supply_check';
+ if(!state.bonusActive && state.heroCostume === 'nurse' && effect === 'ammo_event') effect = 'ammo_support';
+ if(!state.bonusActive && state.heroCostume === 'kimono' && effect === 'shadow') effect = 'kimono_shadow';
+ if(!state.bonusActive && state.heroCostume === 'kimono' && effect === 'warning') effect = 'kimono_shadow';
+ if(!state.bonusActive && state.heroCostume === 'kimono' && effect === 'survive') effect = 'kimono_survive';
+ const showBadge = ['warning','survive'].includes(effect) ? badge : '';
+ els.lcdStatus.textContent=showBadge;
+ els.lcdStatus.classList.toggle('empty', !showBadge);
  els.lcdStatus.classList.toggle('hot',['special','shoot','bonus'].includes(effect));
  els.lcdStatus.classList.toggle('bonus',['special','bonus'].includes(effect));
  els.lcdStatus.classList.toggle('door',effect==='door' || state.door>0);
+ setLcdMood(effect, ['warning','survive','shadow','silentContradiction'].includes(effect) ? 1400 : 850);
  actorClasses(effect);
  if(effect==='shoot'){setHero('shoot');setEnemies('hit')}
  else if(effect==='punch'){setHero('melee');setEnemies('attack')}
  else if(effect==='special'||effect==='bonus'){setHero('special');setEnemies('down')}
  else if(effect==='reveal'){setHero('melee');setEnemies('walk')}
- else if(effect==='avoid'||effect==='item'||effect==='door'){setHero('run');setEnemies('walk')}
+ else if(effect==='hero_run'||effect==='avoid'||effect==='item'||effect==='door'){setHero('run');setEnemies('walk')}
+ else if(effect==='ammo_event'){setHero('shoot');setEnemies('walk')}
+ else if(effect==='cherry_notice'){setHero('melee');setEnemies('hit')}
+ else if(effect==='supply_check'){setHero('idle','nurse');setEnemies('walk')}
+ else if(effect==='medkit_notice'||effect==='comeback_hint'){setHero('shoot','nurse');setEnemies('walk')}
+ else if(effect==='ammo_support'){setHero('shoot','nurse');setEnemies('walk')}
+ else if(effect==='silent_kimono'||effect==='kimono_shadow'){setHero('idle','kimono');setEnemies('walk')}
+ else if(effect==='kimono_cut_in'||effect==='kimono_turn'){setHero('melee','kimono');setEnemies('idle')}
+ else if(effect==='kimono_survive'){setHero('special','kimono');setEnemies('hit')}
+ else if(effect==='enemy_walk'||effect==='shadow'||effect==='warning'||effect==='survive'){setHero(effect==='survive'?'special':'idle');setEnemies('walk')}
  else{setHero('idle');setEnemies('walk')}
 }
 function flash(){ els.flash.classList.remove('on'); void els.flash.offsetWidth; els.flash.classList.add('on'); }
 
-function maxBet(){ if(state.spinning||state.bet===3||state.credit<1||state.challenge||state.bonusActive||state.longFreeze)return; const need=3-state.bet; if(state.credit<need)return; state.credit-=need; state.bet=3; state.diff-=need; state.pay=0; update(); }
+function isRareRole(role){ return ['CHERRY','SUIKA','HERO'].includes(role); }
+function isBonusExpectation(result){ return !!(result?.bonus || result?.bonusReady || result?.hiddenBonus || result?.challenge); }
+function playStopPerformance(stopCount){
+ const result = state.result;
+ const perf = state.presentation;
+ if(!result || state.bonusActive || state.pendingBonus) return;
+ const costume = state.heroCostume;
+ if(stopCount === 1){
+   if(costume === 'nurse' && (perf === 'item_get' || perf === 'ammo_event' || ['REPLAY','BELL','SUIKA'].includes(result.role))){
+     setLcdMood(perf === 'ammo_event' ? 'ammo_support' : 'supply_check', 640);
+     setHero('idle','nurse');
+     return;
+   }
+   if(costume === 'kimono' && (perf === 'shadow' || perf === 'warning' || perf === 'survive')){
+     setLcdMood('kimono_shadow', 760);
+     setHero('idle','kimono');
+     setEnemies('walk');
+     return;
+   }
+   if(perf === 'silent' && (isRareRole(result.role) || isBonusExpectation(result))){
+     setLcdMood('silent', 520);
+     setHero('idle');
+     setEnemies('walk');
+   }else if(perf === 'enemy_walk'){
+     setEnemies('attack');
+   }else if(perf === 'shadow' || perf === 'warning' || perf === 'survive'){
+     setLcdMood('shadow', 760);
+     setHero('idle');
+     setEnemies('walk');
+   }else if(perf === 'cherry_notice'){
+     setLcdMood('cherry_notice', 520);
+   }else if(perf === 'ammo_event'){
+     setLcdMood('ammo_event', 520);
+   }
+   return;
+ }
+ if(stopCount === 2){
+   if(costume === 'nurse' && ['REPLAY','BELL'].includes(result.role)){
+     setLcdMood('medkit_notice', 720);
+     setHero('shoot','nurse');
+     return;
+   }
+   if(costume === 'kimono' && (hasContradiction(perf, result.role, isBonusExpectation(result)) || isBonusExpectation(result))){
+     setLcdMood('kimono_turn', 820);
+     setHero('melee','kimono');
+     setEnemies('idle');
+     return;
+   }
+   if(hasContradiction(perf, result.role, isBonusExpectation(result))){
+     setLcdMood('silentContradiction', 760);
+     setHero('idle');
+     setEnemies('idle');
+   }else if(isBonusExpectation(result)){
+     setLcdMood(perf === 'survive' ? 'survive' : 'warning', 900);
+   }else if(isRareRole(result.role)){
+     setLcdMood(result.role === 'SUIKA' ? 'ammo_event' : 'cherry_notice', 720);
+   }else if(perf === 'hero_run'){
+     setHero('run');
+     setEnemies('walk');
+   }
+ }
+}
+
+function maxBet(){
+ if(state.spinning||state.settling||state.bet===3||state.credit<1||state.challenge||state.bonusActive||state.longFreeze)return;
+ const need=3-state.bet;
+ if(state.credit<need)return;
+ soundManager.playSe('bet');
+ state.credit-=need; state.bet=3; state.diff-=need; state.pay=0; update();
+}
 function pushAction(){
- if(state.longFreeze)return;
- if(state.challenge && !state.spinning){ advanceChallenge(); return; }
+ if(state.longFreeze || state.settling)return;
+ if(state.awaitingPushNotice){
+   soundManager.playSe('push');
+   soundManager.duck(420, .05);
+   revealBonusNotice(state.awaitingPushNotice, 'push');
+   state.awaitingPushNotice = null;
+   return;
+ }
+ if(state.challenge && !state.spinning){
+   if(state.challenge.awaitingPush){
+     soundManager.playSe('push');
+     state.challenge.pushed = true;
+     state.challenge.awaitingPush = false;
+     clearTimer('challenge');
+     setLcdMood('silentContradiction', 520);
+     timers.challenge = setTimeout(()=>advanceChallenge('push'), 520);
+   }else{
+     flash();
+   }
+   return;
+ }
  if(state.pendingBonus && !state.spinning){
    if(state.bonusReady) startBonus();
    else flash();
    return;
  }
- flash(); els.lcdStatus.classList.remove('empty'); els.lcdStatus.textContent = state.spinning ? 'STOP!' : (state.door>0 ? 'SURVIVE' : 'PUSH');
- setTimeout(()=>{ if(!state.spinning && !state.pendingBonus && !state.challenge){ els.lcdStatus.classList.remove('empty'); els.lcdStatus.textContent = state.door>0 ? `SURVIVE ${state.door}` : 'READY'; } }, 300);
+ flash();
+ if(state.door>0) setLcdMood('survive', 650);
 }
 function leverOn(){
- if(state.spinning||state.challenge||state.longFreeze)return;
+ if(state.spinning||state.settling||state.challenge||state.longFreeze)return;
+ if(state.nextGameNotice){
+   soundManager.playSe('lever');
+   const bonus = state.nextGameNotice;
+   state.nextGameNotice = null;
+   revealBonusNotice(bonus, 'next');
+   return;
+ }
  if(!state.bonusActive && state.bet<3)return;
+ soundManager.ensureContextualBgm();
+ soundManager.playSe('lever');
+ soundManager.playSe('reel_start');
+ soundManager.startReelLoop();
  clearPrizeScene();
  clearBossBattle();
  if(!state.pendingBonus) clearBonusConfirm();
  const doorActive = state.door > 0;
- els.lcdStatus.textContent=state.bonusActive ? 'BONUS' : (state.pendingBonus ? 'BONUS?' : (doorActive ? 'SURVIVE' : '...'));
+ els.lcdStatus.textContent='';
  state.games++;
  state.reelBases = reelMap.map(arr => rand(arr.length));
  state.stopIndices = [null,null,null];
  state.spinStartedAt = performance.now();
+ state.performancePhase = 0;
  state.spinning=true; state.stopped=[false,false,false]; state.result=state.bonusActive ? drawBonusGameOutcome() : (state.pendingBonus ? drawPendingBonusOutcome() : drawOutcome()); state.center=state.result.center; state.presentation=choosePresentation(state.result);
+ if(!state.bonusActive){
+   const expectedBonus = isBonusExpectation(state.result);
+   const wouldContradict = hasContradiction(state.presentation, state.result?.role, expectedBonus);
+   setHeroCostume(chooseHeroCostume(state.presentation, state.result?.role, {
+     contradiction:wouldContradict,
+     bonusExpectation:expectedBonus,
+     challengePrelude:!!state.result?.challenge,
+     quietBreak:state.quietGames >= 10,
+     roleHit:['REPLAY','BELL','CHERRY','SUIKA','HERO'].includes(state.result?.role)
+   }));
+ }else if(state.bonusActive.type?.startsWith('SBB')){
+   setHeroCostume('rush');
+ }else{
+   setHeroCostume('school');
+ }
  if(state.door>0) state.door--;
- if(!state.bonusActive && !doorActive && state.games%7===0)setStage(chooseRoamingStage(), true); if(state.games%4===0)randomizeActors();
- playEffect(state.presentation === 'freeze' ? 'special' : 'avoid', state.presentation === 'freeze' ? '!!!' : (state.bonusActive ? 'BONUS' : (state.pendingBonus ? 'BONUS?' : (doorActive ? 'SURVIVE' : '...'))));
+ if(!state.bonusActive && !doorActive && state.games%7===0)setStage(chooseRoamingStage(), true);
+ if(!state.bonusActive && state.quietGames >= 10){
+   setStage(chooseRoamingStage(), true);
+   randomizeActors();
+   setLcdMood('shadow', 1200);
+ }
+ if(state.games%4===0)randomizeActors();
+ if(!state.bonusActive && !state.pendingBonus && state.presentation === 'freeze' && state.result?.bonus){
+   soundManager.stopReelLoop();
+   state.spinning = false;
+   state.stopped = [true,true,true];
+   state.bet = 0;
+   state.pay = 0;
+   state.pendingBonus = state.result.bonus;
+   state.bonusReady = false;
+   pushHistory(`${bonusInfo[state.result.bonus].label} LONG FREEZE`, 0);
+   startLongFreeze(state.result.bonus);
+   update();
+   return;
+ }
+ playEffect(state.presentation === 'freeze' ? 'special' : state.presentation, state.presentation === 'warning' ? 'WARNING' : (state.presentation === 'survive' ? 'SURVIVE' : ''));
  if(state.bonusActive) setBonusLcd(state.bonusActive.type);
  els.reels.forEach((_,i)=>spinVisual(i)); update();
 }
@@ -614,17 +1134,36 @@ function chooseTimedStopIndex(i){
  }
  for(let slip=0; slip<=MAX_SLIP; slip++){
    const centerIndex = modIndex(base + slip, arr.length);
+   const centerSymbol = getRowsForCenter(i, centerIndex)[1];
+   if(i === 0 && state.result?.line?.key === 'miss' && ['cherry','suika'].includes(centerSymbol)) continue;
    if(!wouldCreateMissWin(i, centerIndex)) return centerIndex;
  }
  return base;
 }
 function stopReel(i){
- if(!state.spinning||state.stopped[i]||state.longFreeze)return;
+ if(!state.spinning||state.stopped[i]||state.longFreeze||state.settling)return;
+ soundManager.playSe(`stop${i + 1}`);
  state.stopped[i]=true;
+ const stopCount = state.stopped.filter(Boolean).length;
  const index = chooseTimedStopIndex(i);
  state.stopIndices[i] = index;
  alignReelToIndex(i,index, true);
- if(state.stopped.every(Boolean))settle();
+ if(!state.stopped.every(Boolean)){
+   state.performancePhase = stopCount;
+   playStopPerformance(stopCount);
+ }
+ if(state.stopped.every(Boolean)){
+   soundManager.stopReelLoop();
+   state.settling = true;
+   const delay = settleDelay(state.result);
+   const thirdContradiction = hasContradiction(state.presentation, state.result?.role, isBonusExpectation(state.result));
+   if(thirdContradiction && state.heroCostume === 'kimono') setLcdMood('kimono_cut_in', delay + 360);
+   else if(thirdContradiction) setLcdMood('silentContradiction', delay + 260);
+   else if(state.heroCostume === 'nurse' && ['REPLAY','BELL','SUIKA'].includes(state.result?.role)) setLcdMood('medkit_notice', delay + 180);
+   else if(delay >= 550) setLcdMood('shadow', delay + 120);
+   setTimeout(settle, delay);
+   update();
+ }
 }
 function chooseStopIndex(i,key,controlled=false){
  const arr = reelMap[i];
@@ -657,51 +1196,129 @@ function setCenter(keys){keys.forEach((k,i)=>alignReel(i,k))}
 function getCellHeight(){ return document.querySelector('.symbol')?.getBoundingClientRect().height || 66; }
 
 function startBonusChallenge(result){
+ soundManager.stopReelLoop();
+ soundManager.fadeOutBgm(360, 'boss');
+ soundManager.playSe('bonus_chance_start');
  const clear = !!result.hiddenBonus;
+ const boss = chooseBoss(clear);
+ const pushChance = Math.min(.82, .16 + boss.expect / 120 + (clear ? .16 : 0));
+ const reviveChance = clear ? 0 : Math.min(.28, (boss.expect - 35) / 260 + (['CHERRY','SUIKA','HERO'].includes(result.role) ? .06 : 0) + (state.contradiction ? .08 : 0));
+ const revive = Math.random() < Math.max(0, reviveChance);
  state.challenge = {
-   bonus: result.hiddenBonus,
+   bonus: result.hiddenBonus || (revive ? chooseBonusType() : null),
    role: result.role,
    step:0,
    clear,
+   revive,
+   awaitingPush:false,
+   pushed:false,
+   pushPrompt:Math.random() < pushChance,
    type: result.hiddenBonus ? (Math.random() < .18 ? 'freeze' : (Math.random() < .55 ? 'horde' : 'drop')) : (Math.random() < .55 ? 'crate' : 'horde'),
-   boss:chooseBoss(clear)
+   boss
  };
+ setHeroCostume(chooseHeroCostume('warning', result.role, {
+   challengePrelude:true,
+   contradiction:state.contradiction,
+   bonusExpectation:clear || boss.expect >= 75
+ }));
  clearPrizeScene();
  if(els.prizeScene) els.prizeScene.className = 'prize-scene challenge';
- showBossBattle(state.challenge.boss, 'intro');
- playEffect('avoid','BONUS CHANCE');
+ setLcdMood('silentContradiction', 360);
+ timers.challenge = setTimeout(()=>advanceChallenge('auto'), 360);
  pushHistory(`${result.role} CHANCE`, 0);
  update();
 }
 
-function advanceChallenge(){
+function challengeDelay(c, base){
+ return Math.round(base + c.boss.expect * 4);
+}
+function finishChallengeSuccess(c, label='CHANCE CLEAR'){
+ const bonus = c.bonus || chooseBonusType();
+ soundManager.playSe('bonus_chance_win');
+ soundManager.fadeOutBgm(420);
+ showBossBattle(c.boss, 'down');
+ state.challenge = null;
+ state.pendingBonus = bonus;
+ state.bonusReady = false;
+ revealPrizeScene({bonus, center:bonusInfo[bonus].center});
+ showBonusConfirm();
+ soundManager.playSe('bonus_confirm');
+ playEffect('special', bonusInfo[bonus].badge);
+ pushHistory(`${label} ${bonusInfo[bonus].label}`, 0);
+ update();
+}
+function finishChallengeFail(c){
+ soundManager.playSe('bonus_chance_lose');
+ soundManager.fadeOutBgm(420, 'normal');
+ showBossBattle(c.boss, 'hit');
+ state.challenge = null;
+ clearPrizeScene();
+ setLcdMood('silent', 480);
+ setHero('down');
+ setEnemies('walk');
+ pushHistory('CHANCE FAIL', 0);
+ timers.challenge = setTimeout(()=>{ clearBossBattle(); randomizeActors(); playEffect('idle',''); update(); }, c.boss.expect >= 60 ? 900 : 420);
+ update();
+}
+function startChallengeRevive(c){
+ soundManager.duck(380, 0);
+ soundManager.playSe('revive');
+ setHeroCostume(c.boss.expect >= 75 || state.contradiction ? 'kimono' : 'nurse');
+ setLcdMood(state.heroCostume === 'kimono' ? 'kimono_cut_in' : 'comeback_hint', 880);
+ setHero(state.heroCostume === 'kimono' ? 'special' : 'shoot', state.heroCostume);
+ setEnemies('down');
+ timers.challenge = setTimeout(()=>finishChallengeSuccess(c, 'REVIVAL'), 880);
+}
+function advanceChallenge(source='auto'){
  const c = state.challenge;
  if(!c) return;
+ clearTimer('challenge');
  c.step++;
  if(c.step === 1){
-   state.presentation = c.type;
-   showBossBattle(c.boss, 'attack');
-   playEffect(c.type === 'freeze' ? 'special' : (c.role === 'SUIKA' ? 'shoot' : 'punch'), c.type === 'freeze' ? 'FREEZE' : 'BATTLE');
+   soundManager.playSe(c.boss.expect >= 75 ? 'survive' : 'warning');
+   if(c.boss.expect >= 75 && state.heroCostume !== 'nurse') setHeroCostume('kimono');
+   showBossBattle(c.boss, 'intro');
+   setLcdMood('warning', challengeDelay(c, 520));
+   setHero('idle');
+   setEnemies('walk');
+   timers.challenge = setTimeout(()=>advanceChallenge('auto'), challengeDelay(c, 520));
    return;
  }
  if(c.step === 2){
-   if(c.clear){
-     const bonus = c.bonus;
-     showBossBattle(c.boss, 'down');
-     state.challenge = null;
-     state.pendingBonus = bonus;
-     state.bonusReady = false;
-     revealPrizeScene({bonus, center:bonusInfo[bonus].center});
-     showBonusConfirm();
-     playEffect('special', bonusInfo[bonus].badge);
-     pushHistory(`CHANCE CLEAR ${bonusInfo[bonus].label}`, 0);
+   showBossBattle(c.boss, 'attack');
+   soundManager.playSe(c.role === 'SUIKA' ? 'shoot' : c.role === 'CHERRY' ? 'bat_attack' : 'attack');
+   playEffect(c.role === 'SUIKA' ? 'ammo_event' : c.role === 'CHERRY' ? 'cherry_notice' : 'enemy_walk', '');
+   if(c.boss.expect >= 60 || c.clear) flash();
+   timers.challenge = setTimeout(()=>advanceChallenge('auto'), challengeDelay(c, 620));
+   return;
+ }
+ if(c.step === 3){
+   if(c.pushPrompt){
+     c.awaitingPush = true;
+     showBossBattle(c.boss, c.boss.expect >= 75 ? 'attack' : 'intro');
+     soundManager.playSe('push_notice');
+     soundManager.duck(480, .12);
+     setLcdMood(c.boss.expect >= 75 ? 'survive' : 'push', 1600);
+     timers.challenge = setTimeout(()=>{ if(state.challenge?.awaitingPush){ state.challenge.awaitingPush = false; advanceChallenge('auto'); } }, 1600);
    }else{
+     if(c.boss.expect >= 75) setHeroCostume('kimono');
+     setLcdMood(c.boss.expect >= 75 ? 'survive' : 'shadow', challengeDelay(c, 560));
+     timers.challenge = setTimeout(()=>advanceChallenge('auto'), challengeDelay(c, 560));
+   }
+   update();
+   return;
+ }
+ if(c.step === 4){
+   const hold = source === 'push' ? 650 : (c.boss.expect >= 75 ? 780 : 420);
+   if(c.clear){
+     setLcdMood(c.pushed || c.boss.expect >= 75 ? 'survive' : 'warning', hold);
+     timers.challenge = setTimeout(()=>finishChallengeSuccess(c), hold);
+   }else if(c.revive){
      showBossBattle(c.boss, 'hit');
-     state.challenge = null;
-     clearPrizeScene();
-     playEffect('miss','FAIL');
-     pushHistory('CHANCE FAIL', 0);
-     setTimeout(clearBossBattle, 900);
+     setLcdMood('silent', c.boss.expect >= 60 ? 720 : 420);
+     timers.challenge = setTimeout(()=>startChallengeRevive(c), c.boss.expect >= 60 ? 720 : 420);
+   }else{
+     timers.challenge = setTimeout(()=>finishChallengeFail(c), hold);
    }
    update();
    return;
@@ -720,10 +1337,65 @@ function lineMatchesSymbols(result, symbols){
  if(!result?.grid || !result?.line?.rows?.length || !symbols) return false;
  return result.line.rows.every((row, reelIndex) => result.grid[reelIndex]?.[row] === symbols[reelIndex]);
 }
+function settleDelay(result){
+ if(result?.bonus || result?.bonusReady || result?.hiddenBonus || result?.challenge) return .6 * 1000;
+ if(['CHERRY','SUIKA','HERO'].includes(result?.role)) return 350;
+ if(['REPLAY','BELL'].includes(result?.role)) return 250;
+ return 150;
+}
+function hasContradiction(performance, role, bonus){
+ if(bonus) return ['hero_run','silent','enemy_walk'].includes(performance);
+ if(performance === 'item_get' && ['CHERRY','SUIKA','HERO'].includes(role)) return true;
+ if(performance === 'ammo_event' && role === 'REPLAY') return true;
+ if(performance === 'cherry_notice' && role === 'BELL') return true;
+ if(performance === 'silent' && ['REPLAY','BELL','CHERRY','SUIKA','HERO'].includes(role)) return true;
+ if(performance === 'enemy_walk' && role === 'SUIKA') return true;
+ return false;
+}
+function chooseBonusNotice(){
+ return weightedChoice(bonusNoticeWeights.map(item => ({value:item.type, weight:item.weight})));
+}
+function revealBonusNotice(bonus, type='instant'){
+ if(!bonus) return;
+ soundManager.stopReelLoop();
+ soundManager.fadeOutBgm(260);
+ if(type === 'delayed' || type === 'next') setLcdMood('warning', 600);
+ if(type === 'weird') setLcdMood('silentContradiction', 900);
+ setTimeout(() => {
+   showBonusConfirm();
+   soundManager.playSe('bonus_confirm');
+   playEffect('special', bonusInfo[bonus]?.badge || 'BONUS');
+   pushHistory(`BONUS NOTICE ${type.toUpperCase()}`, 0);
+   update();
+ }, type === 'next' ? 620 : 0);
+}
+function scheduleBonusNotice(bonus, preferredType=null){
+ const type = preferredType || chooseBonusNotice();
+ if(type === 'instant'){
+   revealBonusNotice(bonus, 'instant');
+ }else if(type === 'delayed'){
+   setLcdMood('silentContradiction', 650);
+   setTimeout(()=>revealBonusNotice(bonus, 'delayed'), 620);
+ }else if(type === 'push'){
+   state.awaitingPushNotice = bonus;
+   soundManager.playSe('push_notice');
+   soundManager.duck(600, .08);
+   setLcdMood('warning', 900);
+   pushHistory('PUSH NOTICE READY', 0);
+ }else if(type === 'next'){
+   state.nextGameNotice = bonus;
+   setLcdMood('shadow', 1000);
+   pushHistory('NEXT GAME NOTICE', 0);
+ }else{
+   setLcdMood('silentContradiction', 1400);
+   setTimeout(()=>revealBonusNotice(bonus, 'weird'), 900);
+ }
+}
 
 function settle(){
- const r=applyActualStops(state.result); state.spinning=false; state.pay=r.pay||0;
+ const r=applyActualStops(state.result); state.spinning=false; state.settling=false; state.pay=r.pay||0;
  if(r.bonusGame){
+   soundManager.playSe('payout');
    state.bet=0;
    state.credit+=state.pay;
    state.diff+=state.pay;
@@ -737,19 +1409,39 @@ function settle(){
  }
  if(r.role==='REPLAY')state.bet=3; else state.bet=0;
  const roleHit = lineMatchesSymbols(r, getRoleSymbols(r.role));
+ const contradiction = hasContradiction(state.presentation, r.role, r.bonus || r.bonusReady || r.hiddenBonus);
+ state.contradiction = contradiction;
+ if(contradiction || isBonusExpectation(r)) soundManager.duck(520, .04);
  if(r.role==='REPLAY' && !roleHit) state.bet=0;
  if(r.role==='BELL' && roleHit)state.bell++;
  if(getRoleSymbols(r.role) && !roleHit) state.pay = 0;
- if(shouldRevealPrize(r) && (!getRoleSymbols(r.role) || roleHit)){
+ if(!r.bonus && !r.bonusReady && !r.challenge){
+   if(['CHERRY','SUIKA','HERO'].includes(r.role) && roleHit) soundManager.playSe('rare');
+   else if(state.pay > 0) soundManager.playSe('payout');
+ }
+ if(state.presentation === 'warning') soundManager.playSe('warning');
+ if(state.presentation === 'survive') soundManager.playSe('survive');
+ if(contradiction) setLcdMood('silentContradiction', 1200);
+ if(shouldRevealPrize(r) && (!getRoleSymbols(r.role) || roleHit) && !contradiction){
    revealPrizeScene(r);
  }else{
    clearPrizeScene();
  }
- playEffect((r.bonus || r.bonusReady) ? 'special' : 'reveal', r.bonusReady ? bonusInfo[r.bonusReady].badge : (r.bonus ? bonusInfo[r.bonus].badge : ''));
+ if(!r.bonus && !r.bonusReady){
+   if(contradiction){
+     actorClasses('shadow');
+     setHero('idle');
+     setEnemies('idle');
+   }else{
+     playEffect('reveal', '');
+   }
+ }
  if(r.bonusReady){
    const readyHit = lineMatchesSymbols(r, bonusInfo[r.bonusReady].center);
    state.bonusReady = readyHit;
-   showBonusConfirm();
+   if(readyHit) showBonusConfirm();
+   else showBonusConfirm();
+   if(readyHit) soundManager.playSe('bonus_confirm');
    pushHistory(`${bonusInfo[r.bonusReady].label}${lineText(r)} ${readyHit ? 'READY' : 'MISS'}`, 0);
  }else if(r.bonus){
    state.credit+=state.pay; state.diff+=state.pay;
@@ -759,7 +1451,7 @@ function settle(){
    if(state.presentation === 'freeze'){
      startLongFreeze(r.bonus);
    }else{
-     showBonusConfirm();
+     scheduleBonusNotice(r.bonus, contradiction ? 'weird' : null);
    }
  }else if(r.challenge){
    state.credit+=state.pay; state.diff+=state.pay;
@@ -770,10 +1462,17 @@ function settle(){
    if(state.pendingBonus) showBonusConfirm();
    pushHistory(`${r.role}${lineText(r)}`, state.pay);
  }
+ if(r.bonus || r.bonusReady || r.challenge || ['CHERRY','SUIKA','HERO'].includes(r.role) || ['warning','survive','shadow','cherry_notice','ammo_event'].includes(state.presentation)){
+   state.quietGames = 0;
+ }else{
+   state.quietGames++;
+ }
  update();
 }
 function startBonus(){
  if(!state.pendingBonus||!state.bonusReady||state.spinning||state.bonusActive)return;
+ soundManager.playSe('bonus_start');
+ soundManager.switchBgm('rush', true);
  clearBossBattle();
  clearPrizeScene();
  clearBonusConfirm();
@@ -795,13 +1494,16 @@ function startBonus(){
 function finishBonus(){
  const type = state.bonusActive?.type;
  state.bonusActive = null;
+ setHeroCostume('school');
  clearBonusLcd();
  if(type !== 'REG'){
    state.door = type.startsWith('SBB') ? 64 : 32;
    state.doorHits++;
    setStageByKey('office');
+   soundManager.switchBgm('rush', true);
  }else{
    setStageByKey('station');
+   soundManager.fadeOutBgm(500, 'normal');
  }
  randomizeActors();
  playEffect(type === 'REG' ? 'bonus' : 'door', type !== 'REG' ? `SURVIVE ${state.door}` : 'REG END');
@@ -814,19 +1516,183 @@ function update(){
  const bt=state.big+state.reg+state.sbb; els.bonusRate.textContent=bt?`1/${Math.max(1,Math.round(state.games/bt))}`:'-'; els.bellRate.textContent=state.bell?`1/${(state.games/state.bell).toFixed(1)}`:'-';
  els.modeText.textContent=state.bonusActive?`${state.bonusActive.label} ${state.bonusActive.remaining}`:state.challenge?'BONUS CHANCE':state.pendingBonus?`${bonusInfo[state.pendingBonus].label}成立`:state.spinning?'回転中':state.door>0?`SURVIVE ${state.door}`:'通常';
  els.history.innerHTML=state.history.map(x=>`<li>${x}</li>`).join('');
- document.querySelectorAll('.stop-hit').forEach((b,i)=>b.disabled=!state.spinning||state.stopped[i]);
- $('#leverBtn').disabled=state.spinning||(!state.bonusActive&&state.bet<3)||!!state.challenge||state.longFreeze; $('#maxBetBtn').disabled=state.spinning||state.bet===3||state.credit<1||!!state.challenge||!!state.bonusActive||state.longFreeze; if(els.pushBtn) els.pushBtn.disabled=state.longFreeze;
+ document.querySelectorAll('.stop-hit').forEach((b,i)=>b.disabled=!state.spinning||state.stopped[i]||state.settling);
+ $('#leverBtn').disabled=state.spinning||state.settling||(!state.bonusActive&&state.bet<3)||!!state.challenge||state.longFreeze; $('#maxBetBtn').disabled=state.spinning||state.settling||state.bet===3||state.credit<1||!!state.challenge||!!state.bonusActive||state.longFreeze; if(els.pushBtn) els.pushBtn.disabled=state.longFreeze||state.settling||((!!state.challenge && !state.challenge.awaitingPush) && !state.awaitingPushNotice);
  if(els.settingSelect) els.settingSelect.disabled = state.spinning || !!state.challenge;
+ soundManager.ensureContextualBgm();
+ updateHeroRuntimeDebug();
+ updateSoundDebug();
 }
-function reset(){ Object.assign(state,{credit:50,bet:0,pay:0,diff:0,games:0,big:0,reg:0,sbb:0,bell:0,spinning:false,stopped:[true,true,true],result:null,center:['blue7','bell','cherry'],history:[],stage:0,pendingBonus:null,bonusReady:false,door:0,doorHits:0,presentation:'crate',challenge:null,bonusActive:null,reelBases:[0,0,0],stopIndices:[0,0,0],spinStartedAt:0,longFreeze:false,forceLongFreeze:false}); clearPrizeScene(); clearBossBattle(); clearBonusConfirm(); clearLongFreeze(); clearBonusLcd(); randomizeActors(); setStage(0); playEffect('miss','READY'); setCenter(state.center); update(); }
+function reset(){ soundManager.stopReelLoop(); soundManager.fadeOutBgm(240, 'normal'); Object.assign(state,{credit:50,bet:0,pay:0,diff:0,games:0,big:0,reg:0,sbb:0,bell:0,spinning:false,stopped:[true,true,true],result:null,center:['blue7','bell','cherry'],history:[],stage:0,pendingBonus:null,bonusReady:false,door:0,doorHits:0,presentation:'idle',heroCostume:'school',heroAction:'idle',heroFrameIndex:0,heroFrameTotal:1,heroFramePath:'assets/sprites/hero/school/00.png',heroLoadStatus:'OK',quietGames:0,contradiction:false,settling:false,performancePhase:0,awaitingPushNotice:null,nextGameNotice:null,challenge:null,bonusActive:null,reelBases:[0,0,0],stopIndices:[0,0,0],spinStartedAt:0,longFreeze:false,forceLongFreeze:false}); clearPrizeScene(); clearBossBattle(); clearBonusConfirm(); clearLongFreeze(); clearBonusLcd(); clearLcdMood(); randomizeActors(); setStage(0); playEffect('idle',''); setCenter(state.center); update(); }
 function rand(n){return Math.floor(Math.random()*n)}
+function heroDebugFrames(){
+ return heroFramePaths(heroDebugState.action, heroDebugState.costume);
+}
+function heroDebugFramePath(){
+ const frames = heroDebugFrames();
+ if(!frames.length) return '';
+ heroDebugState.frame = (heroDebugState.frame + frames.length) % frames.length;
+ return frames[heroDebugState.frame];
+}
+function updateHeroDebugInfo(){
+ const info = $('#heroDebugInfo');
+ if(!info) return;
+ const frames = heroDebugFrames();
+ const path = frames[heroDebugState.frame] || '';
+ info.innerHTML = [
+   ['costume', heroDebugState.costume],
+   ['action', normalizeHeroAction(heroDebugState.action)],
+   ['frame', `${frames.length ? heroDebugState.frame + 1 : 0} / ${frames.length}`],
+   ['path', path || '-'],
+   ['status', heroDebugState.status]
+ ].map(([k,v])=>`<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+}
+function renderHeroDebugFrame(){
+ const img = $('#heroDebugPreview');
+ if(!img) return;
+ const path = heroDebugFramePath();
+ if(!path){
+   heroDebugState.status = 'NO FRAME';
+   updateHeroDebugInfo();
+   return;
+ }
+ heroDebugState.status = 'LOADING';
+ img.onload = () => { heroDebugState.status = 'OK'; updateHeroDebugInfo(); };
+ img.onerror = () => {
+   heroDebugState.status = heroDebugState.costume !== 'school' ? 'FAILED - FALLBACK SCHOOL IDLE' : 'FAILED';
+   img.onerror = null;
+   if(heroDebugState.costume !== 'school') img.src = hero.school[0];
+   updateHeroDebugInfo();
+ };
+ img.src = path;
+ updateHeroDebugInfo();
+}
+function stopHeroDebug(){
+ if(heroDebugState.timer) clearInterval(heroDebugState.timer);
+ heroDebugState.timer = null;
+ heroDebugState.playing = false;
+}
+function playHeroDebug(){
+ stopHeroDebug();
+ heroDebugState.playing = true;
+ const interval = Math.max(60, Math.round(1000 / Math.max(1, heroDebugState.fps)));
+ heroDebugState.timer = setInterval(()=>{
+   heroDebugState.frame++;
+   renderHeroDebugFrame();
+ }, interval);
+}
+function restartHeroDebug(){
+ heroDebugState.frame = 0;
+ renderHeroDebugFrame();
+ if(heroDebugState.playing) playHeroDebug();
+}
+function stepHeroDebug(delta){
+ stopHeroDebug();
+ heroDebugState.frame += delta;
+ renderHeroDebugFrame();
+}
+function updateHeroRuntimeDebug(){
+ const info = $('#heroRuntimeInfo');
+ if(!info) return;
+ const role = state.result?.role || '-';
+ const boss = state.challenge?.boss?.label || '-';
+ const bonusHint = !!(state.result?.bonus || state.result?.bonusReady || state.result?.hiddenBonus || state.pendingBonus || state.awaitingPushNotice || state.nextGameNotice);
+ info.innerHTML = [
+   ['currentHeroCostume', state.heroCostume],
+   ['currentHeroAction', state.heroAction],
+   ['currentPerformanceType', state.presentation || '-'],
+   ['currentRole', role],
+   ['isContradiction', String(!!state.contradiction)],
+   ['isBonusHint', String(bonusHint)],
+   ['isBonusChance', String(!!state.challenge)],
+   ['currentBossName', boss],
+   ['liveFrame', `${(state.heroFrameIndex || 0) + 1} / ${state.heroFrameTotal || 1}`],
+   ['livePath', state.heroFramePath || '-'],
+   ['liveLoad', state.heroLoadStatus || '-']
+ ].map(([k,v])=>`<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+}
+function initHeroDebugPanel(){
+ const costume = $('#heroDebugCostume');
+ const action = $('#heroDebugAction');
+ const fps = $('#heroDebugFps');
+ if(!costume || costume.dataset.ready) return;
+ costume.dataset.ready = '1';
+ costume.addEventListener('change', e => { heroDebugState.costume = e.target.value; heroDebugState.frame = 0; renderHeroDebugFrame(); });
+ action.addEventListener('change', e => { heroDebugState.action = e.target.value; heroDebugState.frame = 0; renderHeroDebugFrame(); });
+ fps.addEventListener('input', e => {
+   heroDebugState.fps = Number(e.target.value) || 4;
+   const out = $('#heroDebugFpsValue');
+   if(out) out.textContent = `${heroDebugState.fps} fps`;
+   if(heroDebugState.playing) playHeroDebug();
+ });
+ $('#heroDebugPlay')?.addEventListener('click', playHeroDebug);
+ $('#heroDebugPause')?.addEventListener('click', stopHeroDebug);
+ $('#heroDebugRestart')?.addEventListener('click', restartHeroDebug);
+ $('#heroDebugNext')?.addEventListener('click', () => stepHeroDebug(1));
+ $('#heroDebugPrev')?.addEventListener('click', () => stepHeroDebug(-1));
+ renderHeroDebugFrame();
+ updateHeroRuntimeDebug();
+}
+function updateSoundDebug(){
+ const info = $('#soundDebugInfo');
+ if(!info) return;
+ const s = soundManager.getState();
+ info.innerHTML = [
+   ['currentBgmName', s.currentBgmName],
+   ['desiredBgm', s.desiredBgm],
+   ['muted', String(s.muted)],
+   ['volume', s.volume.toFixed(2)],
+   ['audioUnlocked', String(s.unlocked)],
+   ['reelLoop', String(s.reelLoop)]
+ ].map(([k,v])=>`<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+}
+function initSoundDebugPanel(){
+ const root = $('#soundDebugPanel');
+ if(!root || root.dataset.ready) return;
+ root.dataset.ready = '1';
+ root.querySelectorAll('[data-bgm-test]').forEach(btn => btn.addEventListener('click', () => {
+   soundManager.unlockAudio();
+   soundManager.switchBgm(btn.dataset.bgmTest, false);
+ }));
+ root.querySelectorAll('[data-se-test]').forEach(btn => btn.addEventListener('click', () => {
+   soundManager.unlockAudio();
+   soundManager.playSe(btn.dataset.seTest);
+ }));
+ $('#soundDebugStopBgm')?.addEventListener('click', () => soundManager.stopBgm());
+ $('#soundDebugFadeBgm')?.addEventListener('click', () => soundManager.fadeOutBgm(700));
+ $('#soundDebugToggle')?.addEventListener('click', () => soundManager.setMuted(!soundManager.getState().muted));
+ updateSoundDebug();
+}
 function renderDebugTools(){
  if(!document.body.classList.contains('debug-position') || $('#reelExportBtn')) return;
  const panel = $('#subPanel');
  if(!panel) return;
- panel.insertAdjacentHTML('beforeend', '<section class="card debug-tools"><h2>DEBUG</h2><button id="forceLongFreezeBtn" type="button">NEXT LONG FREEZE</button><button id="reelExportBtn" type="button">EXPORT REEL PNG</button></section>');
+ panel.insertAdjacentHTML('beforeend', `<section class="card debug-tools"><h2>DEBUG</h2><button id="forceLongFreezeBtn" type="button">NEXT LONG FREEZE</button><button id="reelExportBtn" type="button">EXPORT REEL PNG</button></section>
+ <section class="card debug-tools hero-debug">
+   <h2>Hero Animation Debug</h2>
+   <div class="hero-debug-stage"><img id="heroDebugPreview" alt=""></div>
+   <label>Costume<select id="heroDebugCostume"><option>school</option><option>nurse</option><option>kimono</option><option>rush</option></select></label>
+   <label>Action<select id="heroDebugAction"><option>idle</option><option>run</option><option>bat_attack</option><option>shoot</option><option>hit</option><option>down</option></select></label>
+   <label>Speed <span id="heroDebugFpsValue">4 fps</span><input id="heroDebugFps" type="range" min="1" max="16" value="4"></label>
+   <div class="hero-debug-controls"><button id="heroDebugPlay" type="button">Play</button><button id="heroDebugPause" type="button">Pause</button><button id="heroDebugRestart" type="button">Restart</button><button id="heroDebugPrev" type="button">Prev Frame</button><button id="heroDebugNext" type="button">Next Frame</button></div>
+   <h3>Selected Animation</h3>
+   <dl id="heroDebugInfo" class="hero-debug-info"></dl>
+   <h3>Runtime Mapping</h3>
+   <dl id="heroRuntimeInfo" class="hero-debug-info"></dl>
+ </section>
+ <section class="card debug-tools sound-debug" id="soundDebugPanel">
+   <h2>Sound Debug</h2>
+   <h3>BGM</h3>
+   <div class="sound-debug-grid"><button type="button" data-bgm-test="normal">normal.mp3</button><button type="button" data-bgm-test="boss">boss.mp3</button><button type="button" data-bgm-test="rush">rush.mp3</button><button id="soundDebugStopBgm" type="button">STOP BGM</button><button id="soundDebugFadeBgm" type="button">FADE OUT</button><button id="soundDebugToggle" type="button">SOUND ON/OFF</button></div>
+   <h3>SE</h3>
+   <div class="sound-debug-grid">${['bet','lever','reel_start','stop1','stop2','stop3','payout','rare','warning','survive','push_notice','push','bonus_confirm','bonus_start','bonus_chance_start','bonus_chance_win','bonus_chance_lose','revive','freeze','hit','attack','shoot','bat_attack'].map(name=>`<button type="button" data-se-test="${name}">${name}</button>`).join('')}</div>
+   <h3>Status</h3>
+   <dl id="soundDebugInfo" class="hero-debug-info"></dl>
+ </section>`);
  $('#forceLongFreezeBtn').addEventListener('click', reserveLongFreeze);
  $('#reelExportBtn').addEventListener('click', exportReelStripImages);
+ initHeroDebugPanel();
+ initSoundDebugPanel();
 }
 function loadImage(src){
  return new Promise((resolve, reject) => {
