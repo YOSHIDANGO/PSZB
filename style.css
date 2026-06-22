@@ -2181,8 +2181,10 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
   max-width:760px !important;
   margin:0 auto !important;
   margin-bottom:0 !important;
+  order:2;
 }
 .primary-controls{
+  order:1;
   width:100%;
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));
@@ -2201,12 +2203,21 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
 }
 .primary-controls button:active{filter:brightness(1.35)}
 .mobile-control{
+  order:3;
   width:100% !important;
   max-width:none !important;
   margin:0 !important;
   display:grid !important;
   grid-template-columns:repeat(4,minmax(0,1fr)) !important;
   gap:4px !important;
+}
+.menu-overlay{order:4}
+body.fullscreen-wanted .app,
+:fullscreen .app{
+  min-height:100dvh;
+  justify-content:center;
+  padding-top:max(4px,env(safe-area-inset-top)) !important;
+  padding-bottom:max(4px,env(safe-area-inset-bottom)) !important;
 }
 .mobile-control .meter{
   min-width:0;
