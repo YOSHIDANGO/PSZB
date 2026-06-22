@@ -1179,6 +1179,82 @@ body:before{
 @keyframes bossHit{50%{transform:scaleX(-1) translateX(20px) rotate(-4deg);filter:drop-shadow(0 8px 9px rgba(0,0,0,.88)) brightness(1.45)}}
 @keyframes bossDown{to{transform:scaleX(-1) translateY(16px) rotate(9deg);opacity:.42}}
 @keyframes bossNoise{50%{opacity:.12;filter:contrast(1.8)}}
+
+/* BONUS CHANCE readability and result hold */
+.boss-battle.on{
+  background:rgba(95,0,0,.08);
+}
+.boss-battle.on:before{
+  top:3% !important;
+  width:48% !important;
+  padding:4px 0 5px !important;
+  font-size:clamp(12px,2vw,19px) !important;
+  letter-spacing:.1em !important;
+}
+.boss-battle.hot{
+  background:rgba(120,0,0,.13);
+}
+.boss-battle.mid{
+  background:rgba(90,0,0,.1);
+}
+.boss-battle.hot:after,
+.boss-battle.mid:after,
+.boss-battle.low:after{
+  display:block !important;
+  inset:auto 3% auto auto !important;
+  top:4% !important;
+  width:auto !important;
+  min-width:48px;
+  height:auto !important;
+  padding:3px 6px !important;
+  opacity:1 !important;
+  background:rgba(30,0,0,.68) !important;
+  animation:none !important;
+  filter:none !important;
+}
+.boss-rate{
+  left:5% !important;
+  right:5% !important;
+  bottom:3.5% !important;
+  gap:6px !important;
+  padding:4px 8px !important;
+  min-height:0 !important;
+}
+.boss-rate span,
+.boss-rate i{
+  font-size:clamp(6px,.85vw,9px) !important;
+  letter-spacing:.08em !important;
+}
+.boss-rate b{
+  overflow:visible !important;
+  text-overflow:clip !important;
+  font-size:clamp(10px,1.55vw,16px) !important;
+  letter-spacing:0 !important;
+}
+.boss-sprite{
+  z-index:2;
+  right:4% !important;
+  bottom:1% !important;
+  height:76% !important;
+}
+.boss-rate{z-index:4}
+.boss-battle.result-win:before,
+.boss-battle.result-fail:before,
+.boss-battle.revive:before{
+  top:36% !important;
+  width:64% !important;
+  padding:10px 0 !important;
+  font-size:clamp(22px,4vw,38px) !important;
+}
+.boss-battle.result-win:before{content:"WIN" !important;background:rgba(110,0,0,.78) !important}
+.boss-battle.result-fail:before{content:"FAILED" !important;background:rgba(0,0,0,.76) !important;color:#bbb !important}
+.boss-battle.revive:before{content:"REVIVAL" !important;background:rgba(120,0,0,.84) !important}
+.boss-battle.result-win .boss-sprite{animation:bossDown .72s ease-out forwards}
+.boss-battle.result-fail .boss-sprite{animation:bossHit .46s ease-out both}
+.boss-battle.revive .boss-sprite{animation:bossIntro .38s ease-out both}
+.boss-battle.result-win .boss-rate,
+.boss-battle.result-fail .boss-rate,
+.boss-battle.revive .boss-rate{opacity:.35}
 @keyframes flashRed{50%{opacity:.1}}
 @keyframes stageShift{0%{opacity:0}18%{opacity:1;filter:contrast(1.8)}62%{opacity:.85}100%{opacity:0}}
 @keyframes bonusConfirmPulse{50%{filter:brightness(1.35)}}

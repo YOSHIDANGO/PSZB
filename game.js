@@ -10,9 +10,9 @@ const symbolDefs = {
 };
 
 const reelMap = [
- ['replay','bell','red7','replay','blue7','bell','cherry','suika','replay','bell','bar','hero','replay','bell','blue7','cherry','suika','bell','replay','red7','bar'],
- ['bell','replay','blue7','bell','suika','bar','replay','bell','red7','cherry','hero','replay','bell','suika','blue7','bell','bar','replay','cherry','red7','bell'],
- ['replay','bell','bar','blue7','bell','suika','cherry','replay','red7','bell','hero','replay','bell','blue7','suika','bar','replay','cherry','bell','red7','replay']
+ ['red7','blue7','bell','replay','cherry','suika','bell','replay','red7','blue7','bell','suika','replay','cherry','bell','replay','bar','hero','bar','bell','replay'],
+ ['hero','cherry','replay','bell','suika','bar','blue7','replay','bell','replay','cherry','bar','bell','red7','replay','bell','red7','blue7','replay','bell','suika'],
+ ['replay','blue7','bell','red7','suika','replay','bell','blue7','cherry','replay','suika','bell','bar','replay','bell','red7','replay','bar','cherry','bell','hero']
 ];
 
 const payLines = [
@@ -29,6 +29,9 @@ const chancePatterns = [
  {label:'CHANCE目C', symbols:['suika','bell','cherry'], rows:[1,0,1]},
  {label:'HERO目', symbols:['hero','cherry','hero'], rows:[0,1,2]}
 ];
+const payLineDisplayNames = {
+  top:'上段', middle:'中段', bottom:'下段', down:'右下がり', up:'右上がり', miss:'ハズレ', chance:'チャンス目'
+};
 const reachMePatterns = [
  {name:'RED-REPLAY-BAR', symbols:['red7','replay','bar']},
  {name:'BLUE-CHERRY-RED', symbols:['blue7','cherry','red7']},
@@ -43,6 +46,7 @@ const reachMePatterns = [
  {name:'RED-HERO-BAR', symbols:['red7','hero','bar']},
  {name:'BLUE-REPLAY-RED', symbols:['blue7','replay','red7']}
 ];
+const reachMeDisplayNames = Object.fromEntries(reachMePatterns.map((pattern, index) => [pattern.name, `リーチ目${index + 1}`]));
 const middleLine = {key:'middle', label:'荳ｭ谿ｵ', rows:[1,1,1], weight:5};
 const REEL_STEP_MS = 70;
 const MAX_SLIP = 4;
@@ -97,6 +101,8 @@ const bonusInfo = {
   BB_BLUE:{label:'青BIG', badge:'BIG', center:['blue7','blue7','blue7'], pay:280, counter:'big'},
   REG:{label:'REG', badge:'REG', center:['bar','bar','bar'], pay:104, counter:'reg'}
 };
+const bonusDisplayNames = {SBB_RED:'赤SBB', SBB_BLUE:'青SBB', BB_RED:'赤BIG', BB_BLUE:'青BIG', REG:'REG'};
+function bonusDisplayName(type){ return bonusDisplayNames[type] || bonusInfo[type]?.label || type || '-'; }
 
 const backgrounds = [
  {key:'corridor', label:'廃ビル通路', src:'assets/backgrounds/corridor.png', expect:1.00, boost:0},
@@ -137,13 +143,17 @@ function createStopDebug(){
    isSingleCherry:false, isWeakCherry:false, isStrongCherry:false,
    isWeakSuika:false, isStrongSuika:false, isSpecialSuika:false,
    slipCountLeft:0, slipCountCenter:0, slipCountRight:0,
-   avoidedCherrySuikaOnMiss:false, bonusAimAssist:false
+   avoidedCherrySuikaOnMiss:false, bonusAimAssist:false,
+   visibleLineSymbols:'-', evaluatedLineSymbols:'-', internalRole:'-', finalDisplayRole:'-', payoutRole:'-',
+   bonusLineMatched:false, isInvalidBonusLine:false, pendingBonusGameCount:0, targetBonusSymbol:'-',
+   bonusAimAssistLevel:0, bonusCanBePulledLeft:false, bonusCanBePulledCenter:false, bonusCanBePulledRight:false,
+   logDisplayName:'-', reachMeDisplayName:'-', bonusChanceResult:'-'
  };
 }
 const state = {
   credit:50, bet:0, pay:0, diff:0, games:0, big:0, reg:0, sbb:0, bell:0, spinning:false,
   stopped:[true,true,true], result:null, center:['blue7','bell','cherry'], history:[], stage:0,
-  enemyA:'highschool_girl', enemyB:'salaryman', pendingBonus:null, bonusReady:false, setting:1, door:0, doorHits:0,
+  enemyA:'highschool_girl', enemyB:'salaryman', pendingBonus:null, pendingBonusGameCount:0, bonusReady:false, setting:1, door:0, doorHits:0,
   presentation:'idle', currentSceneCategory:'idle', currentDropSymbol:'-', currentEnemyAction:'idle', currentBossPhase:'-', currentBossAction:'-', heroCostume:'school', heroAction:'idle', heroFrameIndex:0, heroFrameTotal:1, heroFramePath:'assets/sprites/hero/school/00.png', heroLoadStatus:'OK',
   quietGames:0, contradiction:false, settling:false, performancePhase:0, awaitingPushNotice:null, nextGameNotice:null,
   challenge:null, bonusActive:null, reelBases:[0,0,0], stopIndices:[0,0,0], spinStartedAt:0, longFreeze:false, forceLongFreeze:false,
@@ -986,9 +996,10 @@ function showBossBattle(boss, phase='intro'){
  els.bossBattle.className = `boss-battle on ${phase} ${tier}`;
  els.bossBattle.dataset.phase = phase.toUpperCase();
  els.bossBattle.dataset.threat = threat;
+ els.bossBattle.dataset.result = phase === 'result-win' ? 'WIN' : phase === 'result-fail' ? 'FAILED' : phase === 'revive' ? 'REVIVAL' : '';
  if(els.lcdWindow) els.lcdWindow.classList.add('boss-mode');
  if(els.bossRate) els.bossRate.innerHTML = `<span>ENCOUNTER</span><b>${boss.label}</b><i>THREAT ${threat}</i>`;
- const action = phase === 'attack' ? 'attack' : phase === 'hit' ? 'hit' : phase === 'down' ? 'down' : phase === 'intro' ? 'run' : 'idle';
+ const action = phase === 'attack' ? 'attack' : phase === 'hit' || phase === 'result-fail' ? 'hit' : phase === 'down' || phase === 'result-win' ? 'down' : phase === 'intro' ? 'run' : 'idle';
  if(phase === 'intro'){ soundManager.playSe('moan'); soundManager.playSe('stage_change'); }
  if(phase === 'intro') triggerCabinetEffect('blackout-on', 420);
  if(phase === 'attack'){ triggerCabinetEffect('rare-strong', 520); triggerCabinetEffect('shake', 300); }
@@ -1192,7 +1203,10 @@ function hasWinningLine(grid){
    return symbols[0] && symbols[0] === symbols[1] && symbols[1] === symbols[2];
  });
 }
-function lineText(result){ return result?.line?.label ? ` ${result.line.label}` : ''; }
+function lineText(result){
+ const key = result?.line?.key;
+ return key && payLineDisplayNames[key] ? ` ${payLineDisplayNames[key]}` : '';
+}
 function shouldRevealPrize(result){
  if(!result || result.bonusGame) return false;
  if(result.bonus || result.bonusReady) return true;
@@ -1380,7 +1394,7 @@ function playStopPerformance(stopCount){
 
 function maxBet(){
  if(state.pendingBonus && state.bonusReady && !state.bonusActive){ startBonus(); return; }
- if(state.spinning||state.settling||state.bet===3||state.credit<1||state.bonusActive||state.longFreeze)return;
+ if(state.spinning||state.settling||state.bet===3||state.credit<1||state.bonusActive||state.longFreeze||(state.challenge && !state.challenge.awaitingGame))return;
  const need=3-state.bet;
  if(state.credit<need)return;
  soundManager.playSe('bet');
@@ -1447,6 +1461,7 @@ function leverOn(){
  const doorActive = state.door > 0;
  els.lcdStatus.textContent='';
  state.games++;
+ if(state.pendingBonus) state.pendingBonusGameCount++;
  state.reelBases = reelMap.map(arr => rand(arr.length));
  state.stopIndices = [null,null,null];
  state.stopDebug = createStopDebug();
@@ -1483,6 +1498,7 @@ function leverOn(){
    state.bet = 0;
    state.pay = 0;
    state.pendingBonus = state.result.bonus;
+   state.pendingBonusGameCount = 0;
    state.bonusReady = false;
    pushHistory(`${bonusInfo[state.result.bonus].label} LONG FREEZE`, 0);
    startLongFreeze(state.result.bonus);
@@ -1546,7 +1562,7 @@ function drawOutcome(){
  const bonusType = chooseBonusType();
  const b = bonusInfo[bonusType];
  if(base.role === 'MISS' || soloHit){
-   const stop = Math.random() < .68 ? buildReachMeStop() : buildLineStop(b.center, weightedPick(payLines), true);
+   const stop = buildReachMeStop();
    return {...base, bonus:bonusType, hiddenBonus:null, challenge:false, ...stop, badge:b.badge, effect:'special'};
  }
  if(base.role === 'CHERRY'){
@@ -1570,7 +1586,7 @@ function drawPendingBonusOutcome(){
  const bonus = state.pendingBonus;
  const info = bonusInfo[bonus];
  const base = drawBaseRole();
- const readyChance = .46;
+ const readyChance = state.pendingBonusGameCount >= 3 ? .92 : state.pendingBonusGameCount >= 2 ? .72 : .56;
  if(Math.random() < readyChance){
    const stop = buildLineStop(info.center, weightedPick(payLines), true);
    return {role:'BONUS_READY', chance:1, ...stop, pay:0, badge:info.badge, effect:'special', bonusReady:bonus, bonusAimAssist:true};
@@ -1628,6 +1644,71 @@ function wouldCreateMissWin(reelIndex, candidateIndex){
  if(indices.some(idx => !Number.isFinite(idx))) return false;
  return hasWinningLine(getVisibleGrid(indices));
 }
+function wouldCreateInvalidBonusLine(reelIndex, candidateIndex){
+ if(reelIndex < 2) return false;
+ const indices = state.stopIndices.map((idx, i) => i === reelIndex ? candidateIndex : idx);
+ if(indices.some(idx => !Number.isFinite(idx))) return false;
+ const probe = {grid:getVisibleGrid(indices), center:indices.map((idx, i) => reelMap[i][idx])};
+ const bonusSymbols = ['red7','blue7','bar'];
+ return bonusSymbols.some(symbol => {
+   if(state.pendingBonus && bonusInfo[state.pendingBonus]?.center?.[0] === symbol) return false;
+   return gridHasSymbolsOnPayLine(probe, [symbol,symbol,symbol]);
+ });
+}
+function visibleWinningTriples(grid){
+ if(!grid) return [];
+ return payLines.flatMap(line => {
+   const symbols = line.rows.map((row, reelIndex) => grid[reelIndex]?.[row]);
+   return symbols[0] && symbols.every(symbol => symbol === symbols[0])
+     ? [{line, symbol:symbols[0], symbols}]
+     : [];
+ });
+}
+function intendedTripleSymbol(result){
+ if(result?.bonusReady && state.pendingBonus) return bonusInfo[state.pendingBonus]?.center?.[0] || null;
+ if(result?.bonusGame) return 'bell';
+ const rows = result?.line?.rows;
+ const targeted = rows?.length === 3 && result?.grid
+   ? rows.map((row, reelIndex) => result.grid[reelIndex]?.[row])
+   : [];
+ if(targeted.length !== 3 || !targeted.every(symbol => symbol === targeted[0])) return null;
+ const expectedByRole = {BELL:'bell', REPLAY:'replay', SUIKA:'suika', CHERRY:'cherry'};
+ if(expectedByRole[result?.role] === targeted[0]) return targeted[0];
+ return null;
+}
+function wouldConflictWithIntendedResult(reelIndex, candidateIndex){
+ if(reelIndex < 2) return false;
+ const indices = state.stopIndices.map((idx, i) => i === reelIndex ? candidateIndex : idx);
+ if(indices.some(idx => !Number.isFinite(idx))) return false;
+ const wins = visibleWinningTriples(getVisibleGrid(indices));
+ const expected = intendedTripleSymbol(state.result);
+ if(expected) return wins.length !== 1 || wins[0].symbol !== expected;
+ return wins.length > 0;
+}
+function canCompleteWithoutRoleConflict(reelIndex, candidateIndex){
+ if(reelIndex >= 2) return !wouldConflictWithIntendedResult(reelIndex, candidateIndex);
+ const indices = state.stopIndices.map((idx, i) => i === reelIndex ? candidateIndex : idx);
+ const rows = state.result?.line?.rows || [];
+ const futureChoices = [];
+ for(let future = reelIndex + 1; future < 3; future++){
+   const desired = intentSymbolAtReel(future);
+   const row = rows[future] ?? 1;
+   const choices = reelMap[future]
+     .map((_, index) => index)
+     .filter(index => !desired || getRowsForCenter(future, index)[row] === desired);
+   futureChoices.push(choices.length ? choices : reelMap[future].map((_, index) => index));
+ }
+ const candidates = futureChoices.length === 2
+   ? futureChoices[0].flatMap(center => futureChoices[1].map(right => [center, right]))
+   : futureChoices[0].map(right => [right]);
+ const expected = intendedTripleSymbol(state.result);
+ return candidates.some(future => {
+   const completed = [...indices];
+   future.forEach((index, offset) => { completed[reelIndex + 1 + offset] = index; });
+   const wins = visibleWinningTriples(getVisibleGrid(completed));
+   return expected ? wins.length === 1 && wins[0].symbol === expected : wins.length === 0;
+ });
+}
 function shouldSuppressLeftRare(result){
  return result?.line?.key === 'miss' && result?.role === 'MISS' && !isBonusExpectation(result) && !state.pendingBonus;
 }
@@ -1644,16 +1725,25 @@ function chooseTimedStopIndex(i){
    state.stopDebug.bonusAimAssist = !!state.result?.bonusAimAssist;
  }
  if(desired){
-   const assistRoles = ['REPLAY','BELL','BONUS_GAME'];
-   const maxSlip = assistRoles.includes(state.result?.role) ? arr.length - 1 : MAX_SLIP;
+   const assistLevel = state.pendingBonus ? Math.min(3, 1 + Math.floor((state.pendingBonusGameCount || 0) / 2)) : 0;
+   const maxSlip = state.result?.bonusReady && assistLevel >= 2 ? arr.length - 1 : MAX_SLIP;
    const candidates = [];
    for(let slip=0; slip<=maxSlip; slip++){
      const centerIndex = modIndex(base + slip, arr.length);
-     if(getRowsForCenter(i, centerIndex)[row] === desired) candidates.push({centerIndex, slip});
+     if(getRowsForCenter(i, centerIndex)[row] === desired && canCompleteWithoutRoleConflict(i, centerIndex)) candidates.push({centerIndex, slip});
    }
    if(candidates.length){
      if(state.stopDebug) state.stopDebug[['slipCountLeft','slipCountCenter','slipCountRight'][i]] = candidates[0].slip;
      return candidates[0].centerIndex;
+   }
+   if(['REPLAY','BELL','BONUS_GAME'].includes(state.result?.role)){
+     for(let slip=MAX_SLIP + 1; slip<arr.length; slip++){
+       const centerIndex = modIndex(base + slip, arr.length);
+       if(getRowsForCenter(i, centerIndex)[row] === desired && canCompleteWithoutRoleConflict(i, centerIndex)){
+         if(state.stopDebug) state.stopDebug[['slipCountLeft','slipCountCenter','slipCountRight'][i]] = slip;
+         return centerIndex;
+       }
+     }
    }
  }
  for(let slip=0; slip<=MAX_SLIP; slip++){
@@ -1663,7 +1753,7 @@ function chooseTimedStopIndex(i){
      if(state.stopDebug) state.stopDebug.avoidedCherrySuikaOnMiss = true;
      continue;
    }
-   if(!wouldCreateMissWin(i, centerIndex)){
+   if(!wouldCreateMissWin(i, centerIndex) && canCompleteWithoutRoleConflict(i, centerIndex)){
      if(state.stopDebug) state.stopDebug[['slipCountLeft','slipCountCenter','slipCountRight'][i]] = slip;
      return centerIndex;
    }
@@ -1671,11 +1761,20 @@ function chooseTimedStopIndex(i){
  if(i === 0 && shouldSuppressLeftRare(state.result)){
    for(let slip=MAX_SLIP + 1; slip<arr.length; slip++){
      const centerIndex = modIndex(base + slip, arr.length);
-     if(!leftCandidateHasRare(centerIndex) && !wouldCreateMissWin(i, centerIndex)){
+     if(!leftCandidateHasRare(centerIndex) && !wouldCreateMissWin(i, centerIndex) && canCompleteWithoutRoleConflict(i, centerIndex)){
        if(state.stopDebug){
          state.stopDebug.avoidedCherrySuikaOnMiss = true;
          state.stopDebug.slipCountLeft = slip;
        }
+       return centerIndex;
+     }
+   }
+ }
+ if(i === 2){
+   for(let slip=MAX_SLIP + 1; slip<arr.length; slip++){
+     const centerIndex = modIndex(base + slip, arr.length);
+     if(!wouldConflictWithIntendedResult(i, centerIndex)){
+       if(state.stopDebug) state.stopDebug.slipCountRight = slip;
        return centerIndex;
      }
    }
@@ -1820,35 +1919,55 @@ function finishChallengeSuccess(c, label='CHANCE CLEAR'){
  const bonus = c.bonus || chooseBonusType();
  setPushGlow(false);
  soundManager.stopTransientSe();
- soundManager.playSe('bonus_chance_win');
  soundManager.fadeOutBgm(420);
  triggerCabinetEffect('flash-strong', 760);
  setCabinetMode('bonus-confirm');
- showBossBattle(c.boss, 'down');
- state.challenge = null;
- state.pendingBonus = bonus;
- state.bonusReady = false;
- revealPrizeScene({bonus, center:bonusInfo[bonus].center});
- showBonusConfirm();
- soundManager.playSe('bonus_confirm');
- playEffect('special', bonusInfo[bonus].badge);
- pushHistory(`${label} ${bonusInfo[bonus].label}`, 0);
+ showBossBattle(c.boss, 'result-win');
+ soundManager.playSe('bonus_chance_win');
+ state.currentBossPhase = 'result-win';
+ c.result = 'WIN';
+ state.stopDebug.bonusChanceResult = 'WIN';
+ pushHistory(`${label} ${bonusDisplayName(bonus)}`, 0);
  update();
+ clearTimer('challengeResult');
+ timers.challengeResult = setTimeout(() => {
+   if(state.challenge !== c) return;
+   state.challenge = null;
+   state.pendingBonus = bonus;
+   state.pendingBonusGameCount = 0;
+   state.bonusReady = false;
+   revealPrizeScene({bonus, center:bonusInfo[bonus].center});
+   showBonusConfirm();
+   soundManager.playSe('bonus_confirm');
+   playEffect('special', bonusInfo[bonus].badge);
+   update();
+ }, 1000);
 }
 function finishChallengeFail(c){
  setPushGlow(false);
  soundManager.stopTransientSe();
- soundManager.playSe('bonus_chance_lose');
  soundManager.fadeOutBgm(420, 'normal');
  triggerCabinetEffect('flash-weak', 360);
- showBossBattle(c.boss, 'hit');
- state.challenge = null;
+ showBossBattle(c.boss, 'result-fail');
+ soundManager.playSe('bonus_chance_lose');
+ state.currentBossPhase = 'result-fail';
+ c.result = 'FAILED';
+ state.stopDebug.bonusChanceResult = 'FAILED';
  clearPrizeScene();
- setLcdMood('silent', 480);
+ setLcdMood('silent', 800);
  setHero('down');
  setEnemies('walk');
  pushHistory('CHANCE FAIL', 0);
- timers.challenge = setTimeout(()=>{ clearBossBattle(); setCabinetMode(state.door > 0 ? 'survive' : 'normal'); randomizeActors(); playEffect('idle',''); update(); }, c.boss.expect >= 60 ? 900 : 420);
+ clearTimer('challengeResult');
+ timers.challengeResult = setTimeout(()=>{
+   if(state.challenge !== c) return;
+   state.challenge = null;
+   clearBossBattle();
+   setCabinetMode(state.door > 0 ? 'survive' : 'normal');
+   randomizeActors();
+   playEffect('idle','');
+   update();
+ }, c.boss.expect >= 60 ? 1000 : 800);
  update();
 }
 function startChallengeRevive(c){
@@ -1856,6 +1975,10 @@ function startChallengeRevive(c){
  triggerCabinetEffect('blackout-on', 760);
  soundManager.duck(380, 0);
  soundManager.playSe('revive');
+ showBossBattle(c.boss, 'revive');
+ state.currentBossPhase = 'revive';
+ c.result = 'REVIVAL';
+ state.stopDebug.bonusChanceResult = 'REVIVAL';
  setHeroCostume(c.boss.expect >= 75 || state.contradiction ? 'kimono' : 'nurse');
  setLcdMood(state.heroCostume === 'kimono' ? 'kimono_cut_in' : 'comeback_hint', 880);
  setHero(state.heroCostume === 'kimono' ? 'special' : 'shoot', state.heroCostume);
@@ -1953,9 +2076,12 @@ function finishChallengeReelGame(){
  if(c.clear){
    finishChallengeSuccess(c);
  }else if(c.revive){
-   showBossBattle(c.boss, 'hit');
-   setLcdMood('silent', c.boss.expect >= 60 ? 720 : 420);
-   timers.challenge = setTimeout(()=>startChallengeRevive(c), c.boss.expect >= 60 ? 720 : 420);
+   showBossBattle(c.boss, 'result-fail');
+   state.currentBossPhase = 'result-fail';
+   c.result = 'FAILED';
+   state.stopDebug.bonusChanceResult = 'REVIVE_PENDING';
+   setLcdMood('silent', 650);
+   timers.challenge = setTimeout(()=>startChallengeRevive(c), 650);
    update();
  }else{
    finishChallengeFail(c);
@@ -1978,12 +2104,66 @@ function gridHasSymbolsOnPayLine(result, symbols){
  if(!result?.grid || !symbols) return false;
  return payLines.some(line => line.rows.every((row, reelIndex) => result.grid[reelIndex]?.[row] === symbols[reelIndex]));
 }
+function visiblePayLines(result){
+ if(!result?.grid) return [];
+ return payLines.map(line => ({
+   line,
+   symbols:line.rows.map((row, reelIndex) => result.grid[reelIndex]?.[row] || '-')
+ }));
+}
+function evaluateVisibleResult(result){
+ const lines = visiblePayLines(result);
+ const triples = symbol => lines.find(item => item.symbols.every(value => value === symbol));
+ const bonusMatch = ['red7','blue7','bar'].map(symbol => ({symbol, hit:triples(symbol)})).find(item => item.hit);
+ const targetSymbol = state.pendingBonus ? bonusInfo[state.pendingBonus]?.center?.[0] : null;
+ const matchingBonus = !!(bonusMatch && targetSymbol === bonusMatch.symbol);
+ const invalidBonus = !!(bonusMatch && !matchingBonus);
+ let finalRole = 'MISS';
+ let payoutRole = 'MISS';
+ let pay = 0;
+ let hitLine = null;
+ if(bonusMatch){
+   hitLine = bonusMatch.hit.line;
+   finalRole = matchingBonus ? 'BONUS_READY' : 'INVALID_BONUS_LINE';
+   payoutRole = 'NONE';
+ }else if(triples('replay')){
+   hitLine = triples('replay').line; finalRole = payoutRole = 'REPLAY';
+ }else if(triples('bell')){
+   hitLine = triples('bell').line; finalRole = payoutRole = 'BELL'; pay = 8;
+ }else if(result?.center?.[0] === 'cherry'){
+   finalRole = payoutRole = 'CHERRY'; pay = 2;
+ }else if(triples('suika') || result?.center?.[0] === 'suika'){
+   hitLine = triples('suika')?.line || null;
+   finalRole = payoutRole = 'SUIKA';
+   pay = triples('suika') ? 5 : 0;
+ }else if(result?.center?.includes('hero')){
+   finalRole = result.role === 'HERO' ? 'HERO' : 'HERO_CHANCE';
+   payoutRole = result.role === 'HERO' ? 'HERO' : 'NONE';
+   pay = result.role === 'HERO' ? 3 : 0;
+ }else if(result?.isReachMe || matchedReachMeName(result?.center || []) !== '-'){
+   finalRole = 'REACH_ME';
+   payoutRole = 'NONE';
+ }
+ const lineSummary = lines.map(item => `${payLineDisplayNames[item.line.key] || item.line.key}:${item.symbols.join('/')}`);
+ return {lines, lineSummary, bonusMatch, matchingBonus, invalidBonus, finalRole, payoutRole, pay, hitLine};
+}
 function matchedReachMeName(symbols){
  const hit = reachMePatterns.find(p => p.symbols.every((symbol, i) => symbol === symbols[i]));
  return hit?.name || '-';
 }
+function displayRoleName(role, debug={}){
+ const strengthNames = {
+   CHERRY_WEAK:'弱チェリー', CHERRY_STRONG:'強チェリー', CHERRY_SINGLE:'単チェリー',
+   SUIKA_WEAK:'弱スイカ', SUIKA_STRONG:'強スイカ', SUIKA_SPECIAL:'特殊スイカ',
+   HERO_CHANCE:'HEROチャンス目', REACH_ME:'リーチ目'
+ };
+ if(strengthNames[debug.roleStrength]) return strengthNames[debug.roleStrength];
+ const names = {REPLAY:'REPLAY', BELL:'BAT', CHERRY:'CHERRY', SUIKA:'AMMO', HERO:'HERO', MISS:'ハズレ', BONUS_READY:'ボーナス図柄揃い', INVALID_BONUS_LINE:'ボーナス図柄揃い（無効）', NONE:'払い出しなし'};
+ return names[role] || role || '-';
+}
 function analyzeStopResult(result){
  const debug = createStopDebug();
+ const visible = evaluateVisibleResult(result);
  const previous = state.stopDebug || {};
  debug.slipCountLeft = previous.slipCountLeft || 0;
  debug.slipCountCenter = previous.slipCountCenter || 0;
@@ -1991,6 +2171,7 @@ function analyzeStopResult(result){
  debug.avoidedCherrySuikaOnMiss = !!previous.avoidedCherrySuikaOnMiss;
  debug.bonusAimAssist = !!(previous.bonusAimAssist || result?.bonusAimAssist);
  debug.currentRole = result?.role || '-';
+ debug.internalRole = result?.role || '-';
  debug.pendingBonus = state.pendingBonus || '-';
  debug.currentBonusType = result?.bonus || result?.bonusReady || result?.hiddenBonus || state.pendingBonus || '-';
  const center = result?.center || ['-','-','-'];
@@ -1998,6 +2179,7 @@ function analyzeStopResult(result){
  debug.leftStopSymbol = center[0] || '-';
  debug.isReachMe = !!result?.isReachMe || matchedReachMeName(center) !== '-';
  debug.reachMeName = result?.reachMeName || matchedReachMeName(center);
+ debug.reachMeDisplayName = reachMeDisplayNames[debug.reachMeName] || (debug.reachMeName !== '-' ? 'リーチ目' : '-');
  if(center[0] === 'cherry'){
    debug.isStrongCherry = center[1] === 'cherry' && center[2] === 'cherry';
    debug.isWeakCherry = center[1] === 'cherry' && center[2] !== 'cherry';
@@ -2016,6 +2198,25 @@ function analyzeStopResult(result){
    debug.roleStrength = result?.roleStrength || '-';
  }
  debug.displayedRole = result?.displayedRole || debug.roleStrength || debug.currentRole;
+ debug.visibleLineSymbols = visible.lineSummary.join(' | ');
+ debug.evaluatedLineSymbols = visible.bonusMatch ? visible.bonusMatch.hit.symbols.join(' / ') : (visible.lines.find(item => item.line === visible.hitLine)?.symbols.join(' / ') || center.join(' / '));
+ debug.finalDisplayRole = visible.finalRole;
+ debug.payoutRole = visible.payoutRole;
+ debug.bonusLineMatched = visible.matchingBonus;
+ debug.isInvalidBonusLine = visible.invalidBonus;
+ debug.pendingBonusGameCount = state.pendingBonusGameCount || 0;
+ debug.targetBonusSymbol = state.pendingBonus ? bonusInfo[state.pendingBonus]?.center?.[0] || '-' : '-';
+ debug.bonusAimAssistLevel = state.pendingBonus ? Math.min(3, 1 + Math.floor((state.pendingBonusGameCount || 0) / 2)) : 0;
+ const canPull = reelIndex => {
+   if(!state.pendingBonus) return false;
+   const target = bonusInfo[state.pendingBonus]?.center?.[0];
+   const base = currentReelIndex(reelIndex);
+   return Array.from({length:MAX_SLIP + 1}, (_, slip) => getRowsForCenter(reelIndex, modIndex(base + slip, reelMap[reelIndex].length))).some(rows => rows.includes(target));
+ };
+ debug.bonusCanBePulledLeft = canPull(0);
+ debug.bonusCanBePulledCenter = canPull(1);
+ debug.bonusCanBePulledRight = canPull(2);
+ debug.logDisplayName = displayRoleName(visible.finalRole, debug);
  debug.stopResult = debug.isReachMe ? `REACH:${debug.reachMeName}` : debug.roleStrength !== '-' ? debug.roleStrength : debug.currentRole;
  state.stopDebug = debug;
  return debug;
@@ -2084,7 +2285,9 @@ function scheduleBonusNotice(bonus, preferredType=null){
 }
 
 function settle(){
- const r=applyActualStops(state.result); state.spinning=false; state.settling=false; state.pay=r.pay||0;
+ const r=applyActualStops(state.result); state.spinning=false; state.settling=false;
+ const visibleResult = evaluateVisibleResult(r);
+ state.pay = r.bonusGame ? (r.pay || 0) : visibleResult.pay;
  const stopDebug = analyzeStopResult(r);
  if(r.bonusGame){
    soundManager.playSe('payout');
@@ -2101,17 +2304,14 @@ function settle(){
    update();
    return;
  }
- if(r.role==='REPLAY')state.bet=3; else state.bet=0;
- const roleHit = r.role === 'CHERRY' ? r.center?.[0] === 'cherry' : r.role === 'SUIKA' ? stopDebug.isWeakSuika : lineMatchesSymbols(r, getRoleSymbols(r.role));
- const pendingReadyHit = state.pendingBonus && gridHasSymbolsOnPayLine(r, bonusInfo[state.pendingBonus].center);
+ if(visibleResult.payoutRole === 'REPLAY')state.bet=3; else state.bet=0;
+ const roleHit = r.role === 'CHERRY' ? visibleResult.payoutRole === 'CHERRY' : r.role === 'SUIKA' ? (stopDebug.isWeakSuika && visibleResult.payoutRole === 'SUIKA') : visibleResult.payoutRole === r.role;
+ const pendingReadyHit = !!visibleResult.matchingBonus;
  const contradiction = hasContradiction(state.presentation, r.role, r.bonus || r.bonusReady || r.hiddenBonus);
  state.contradiction = contradiction;
  if(contradiction || isBonusExpectation(r)) soundManager.duck(520, .04);
  if(r.role==='REPLAY' && !roleHit) state.bet=0;
- if(r.role==='BELL' && roleHit)state.bell++;
- if(r.role === 'CHERRY' && roleHit) state.pay = Math.max(state.pay, 2);
- if(r.role === 'SUIKA' && !stopDebug.isWeakSuika) state.pay = 0;
- if(getRoleSymbols(r.role) && !roleHit) state.pay = 0;
+ if(visibleResult.payoutRole === 'BELL')state.bell++;
  if(!r.bonus && !r.bonusReady && !r.challenge){
    if(['CHERRY','SUIKA','HERO'].includes(r.role) && roleHit) soundManager.playSe('rare');
    else if(state.pay > 0) soundManager.playSe('payout');
@@ -2122,7 +2322,7 @@ function settle(){
  if(stopDebug.isReachMe) triggerCabinetEffect('reachme-hint', 760);
  if(['CHERRY','SUIKA','HERO'].includes(r.role) && roleHit) cabinetRareEffect(stopDebug, r);
  else if(state.pay > 0) triggerCabinetEffect('payout', 460);
- const bonusReadyHitNow = r.bonusReady && gridHasSymbolsOnPayLine(r, bonusInfo[r.bonusReady].center);
+ const bonusReadyHitNow = !!(r.bonusReady && visibleResult.matchingBonus);
  const prizeShown = !pendingReadyHit && shouldRevealPrize(r) && (!r.bonusReady || bonusReadyHitNow) && (!getRoleSymbols(r.role) || roleHit) && !contradiction;
  if(prizeShown){
    revealPrizeScene(r);
@@ -2153,13 +2353,14 @@ function settle(){
    else showBonusConfirm();
    if(readyHit) soundManager.playSe('bonus_confirm');
    if(readyHit){ triggerCabinetEffect('flash-strong', 760); setCabinetMode('bonus-confirm'); }
-   pushHistory(`${bonusInfo[r.bonusReady].label}${lineText(r)} ${readyHit ? 'READY' : 'MISS'}`, 0);
+   pushHistory(`${bonusDisplayName(r.bonusReady)}狙い${lineText({...r,line:visibleResult.hitLine || r.line})} ${readyHit ? '揃い' : 'MISS'}`, 0);
    if(readyHit) autoStartBonusAfterReady();
  }else if(r.bonus){
    state.credit+=state.pay; state.diff+=state.pay;
    state.pendingBonus = r.bonus;
-   state.bonusReady = gridHasSymbolsOnPayLine(r, bonusInfo[r.bonus].center);
-   pushHistory(`${r.role}${lineText(r)}+${bonusInfo[r.bonus].label}${state.presentation === 'freeze' ? ' LONG FREEZE' : ''}`, state.pay);
+   state.pendingBonusGameCount = 0;
+   state.bonusReady = !!visibleResult.matchingBonus;
+   pushHistory(`${displayRoleName(visibleResult.finalRole, stopDebug)}${lineText({...r,line:visibleResult.hitLine || r.line})} + ${bonusDisplayName(r.bonus)}${state.presentation === 'freeze' ? ' LONG FREEZE' : ''}`, state.pay);
    if(state.bonusReady){ triggerCabinetEffect('flash-strong', 760); setCabinetMode('bonus-confirm'); autoStartBonusAfterReady(1100); }
    if(state.presentation === 'freeze'){
      startLongFreeze(r.bonus);
@@ -2173,7 +2374,7 @@ function settle(){
  }else{
    state.credit+=state.pay; state.diff+=state.pay;
    if(state.pendingBonus) showBonusConfirm();
-   pushHistory(`${r.role}${lineText(r)}`, state.pay);
+   pushHistory(`${displayRoleName(visibleResult.finalRole, stopDebug)}${lineText({...r,line:visibleResult.hitLine || r.line})}`, state.pay);
  }
  if(r.bonus || r.bonusReady || r.challenge || ['CHERRY','SUIKA','HERO'].includes(r.role) || ['warning','survive','shadow','cherry_notice','ammo_event'].includes(state.presentation)){
    state.quietGames = 0;
@@ -2199,6 +2400,7 @@ function startBonus(){
  if(info.counter === 'reg') state.reg++;
  state.bonusActive = {type, label:info.label, remaining:info.pay, total:info.pay, games:0, chunk:type === 'REG' ? 13 : 15};
  state.pendingBonus = null;
+ state.pendingBonusGameCount = 0;
  state.bonusReady = false;
  randomizeActors();
  playEffect('bonus', 'BONUS START');
@@ -2229,13 +2431,26 @@ function finishBonus(){
  playEffect(type === 'REG' ? 'bonus' : 'door', type !== 'REG' ? `SURVIVE ${state.door}` : 'REG END');
  pushHistory(type !== 'REG' ? `SURVIVE ${state.door}` : 'REG END', 0);
 }
-function pushHistory(role,pay){ state.history.unshift(`${state.games}G ${role}${pay?` +${pay}`:''}`); state.history=state.history.slice(0,10); }
+function sanitizeHistoryLabel(role){
+ let label = String(role || '').trim();
+ if(label.includes('PENDING_REACH')) label = `PENDING_REACH ${state.stopDebug?.reachMeDisplayName || 'リーチ目'}`;
+ for(const [key, info] of Object.entries(bonusInfo)) label = label.split(info.label).join(bonusDisplayName(key));
+ for(const [raw, display] of Object.entries(reachMeDisplayNames)) label = label.split(raw).join(display);
+ if(state.bonusReady && state.pendingBonus && /[\uFFFD]|謠|壺|銘/.test(label)) label = `${bonusDisplayName(state.pendingBonus)} 図柄揃い`;
+ return label.replace(/[\uFFFD]/g, '').replace(/\s+/g, ' ').trim();
+}
+function pushHistory(role,pay){
+ const label = sanitizeHistoryLabel(role);
+ state.stopDebug.logDisplayName = label;
+ state.history.unshift(`${state.games}G ${label}${pay?` +${pay}`:''}`);
+ state.history=state.history.slice(0,10);
+}
 function update(){
  els.credit.textContent=state.credit; els.bet.textContent=state.bet; els.pay.textContent=state.pay; els.diff.textContent=state.diff; els.games.textContent=state.games; els.big.textContent=state.big; els.reg.textContent=state.reg;
  if(els.sbb) els.sbb.textContent=state.sbb; if(els.door) els.door.textContent=state.door>0?state.door:'-';
  const bt=state.big+state.reg+state.sbb; els.bonusRate.textContent=bt?`1/${Math.max(1,Math.round(state.games/bt))}`:'-'; els.bellRate.textContent=state.bell?`1/${(state.games/state.bell).toFixed(1)}`:'-';
  els.modeText.textContent=state.bonusActive?`${state.bonusActive.label} ${state.bonusActive.remaining}`:state.challenge?'BONUS CHANCE':state.pendingBonus?`${bonusInfo[state.pendingBonus].label}成立`:state.spinning?'回転中':state.door>0?`SURVIVE ${state.door}`:'通常';
- els.history.innerHTML=state.history.map(x=>`<li>${x}</li>`).join('');
+ els.history.replaceChildren(...state.history.map(text => { const li=document.createElement('li'); li.textContent=text; return li; }));
  document.querySelectorAll('.stop-hit').forEach((b,i)=>b.disabled=!state.spinning||state.stopped[i]||state.settling);
  $('#leverBtn').disabled=state.spinning||state.settling||(!state.bonusActive&&state.bet<3)||state.longFreeze; $('#maxBetBtn').disabled=state.spinning||state.settling||state.bet===3||state.credit<1||!!state.bonusActive||state.longFreeze; if(els.pushBtn) els.pushBtn.disabled=state.longFreeze||state.settling||((!!state.challenge && !state.challenge.awaitingPush) && !state.awaitingPushNotice);
  if(els.settingSelect) els.settingSelect.disabled = state.spinning || !!state.challenge;
@@ -2358,6 +2573,22 @@ function updateHeroRuntimeDebug(){
    ['slipCountRight', stop.slipCountRight ?? 0],
    ['avoidedCherrySuikaOnMiss', String(!!stop.avoidedCherrySuikaOnMiss)],
    ['bonusAimAssist', String(!!stop.bonusAimAssist)],
+   ['visibleLineSymbols', stop.visibleLineSymbols || '-'],
+   ['evaluatedLineSymbols', stop.evaluatedLineSymbols || '-'],
+   ['internalRole', stop.internalRole || '-'],
+   ['finalDisplayRole', stop.finalDisplayRole || '-'],
+   ['payoutRole', stop.payoutRole || '-'],
+   ['bonusLineMatched', String(!!stop.bonusLineMatched)],
+   ['isInvalidBonusLine', String(!!stop.isInvalidBonusLine)],
+   ['pendingBonusGameCount', stop.pendingBonusGameCount ?? state.pendingBonusGameCount ?? 0],
+   ['targetBonusSymbol', stop.targetBonusSymbol || '-'],
+   ['bonusAimAssistLevel', stop.bonusAimAssistLevel ?? 0],
+   ['bonusCanBePulledLeft', String(!!stop.bonusCanBePulledLeft)],
+   ['bonusCanBePulledCenter', String(!!stop.bonusCanBePulledCenter)],
+   ['bonusCanBePulledRight', String(!!stop.bonusCanBePulledRight)],
+   ['logDisplayName', stop.logDisplayName || '-'],
+   ['reachMeDisplayName', stop.reachMeDisplayName || '-'],
+   ['bonusChanceResult', state.challenge?.result || stop.bonusChanceResult || '-'],
    ['liveFrame', `${(state.heroFrameIndex || 0) + 1} / ${state.heroFrameTotal || 1}`],
    ['livePath', state.heroFramePath || '-'],
    ['liveLoad', state.heroLoadStatus || '-']
