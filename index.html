@@ -52,6 +52,7 @@
         <img class="prize-symbol" id="prizeSymbol" src="" alt="">
       </div>
       <div class="lcd-status" id="lcdStatus">READY</div>
+      <div class="reach-notice" id="reachNotice" aria-hidden="true"><span>リーチ目</span><b>BONUS確定</b></div>
       <div class="screen-flash" id="screenFlash"></div>
       <div class="long-freeze" id="longFreeze" aria-hidden="true">
         <video id="longFreezeVideo" class="long-freeze-video" src="assets/lcd/long-freeze.mp4" preload="auto" muted playsinline></video>
@@ -103,6 +104,7 @@
         <button type="button" data-menu-tab="history">履歴</button>
         <button type="button" data-menu-tab="symbols">図柄</button>
         <button type="button" data-menu-tab="sound">サウンド</button>
+        <button type="button" data-menu-tab="guide">遊び方</button>
         <button class="debug-only" type="button" data-menu-tab="debug">DEBUG</button>
       </nav>
       <div class="menu-body">
@@ -124,6 +126,8 @@
           <p class="spec-note">小役重複 / SBB・BB・REG / SURVIVE ZONE</p>
           <h3>STAGE</h3>
           <div class="stage-buttons" id="stageButtons"></div>
+          <h3>演出確認</h3>
+          <button id="forceFreezeUiBtn" class="menu-test-command" type="button">NEXT FREEZE</button>
         </section>
         <section class="menu-panel" data-menu-panel="history">
           <ol id="history" class="menu-history"></ol>
@@ -136,6 +140,29 @@
             <button id="menuSoundToggle" type="button">SOUND ON</button>
             <label>音量 <input id="soundVolume" type="range" min="0" max="100" value="70"></label>
           </div>
+        </section>
+        <section class="menu-panel menu-guide" data-menu-panel="guide">
+          <h3>この機種について</h3>
+          <p>DIE YETは、ゾンビだらけの街を舞台にした5ラインのAタイプです。通常時は青7を目安に狙い、滑りや停止形からCHERRY・AMMO・HERO・ボーナスを察知します。</p>
+          <h3>基本の流れ</h3>
+          <ol>
+            <li>MAX BETで3枚投入し、レバーでリールを始動します。</li>
+            <li>REPLAYとBELLは基本役、CHERRY・AMMO・HEROはチャンス役です。</li>
+            <li>レア役の一部からボスとのBONUS CHANCEへ発展します。</li>
+            <li>BONUS確定後は、赤7・青7・BARの対応図柄を揃えるとボーナス開始です。</li>
+          </ol>
+          <h3>リーチ目</h3>
+          <p>通常時には出にくい特殊な停止形です。出現した時点でボーナス確定となり、液晶に「リーチ目 / BONUS確定」が表示されます。</p>
+          <p class="guide-examples">例：RED7・REPLAY・BAR / BLUE7・CHERRY・RED7 / HERO・BAR・HERO</p>
+          <h3>SURVIVE MODE</h3>
+          <p>SBB終了後は64G、BIG終了後は32G継続する高期待モードです。滞在中はボーナス抽選が強化され、専用BGMと筐体ランプで示唆します。REG終了後は突入しません。</p>
+          <h3>レア役の強さ</h3>
+          <dl class="guide-role-list">
+            <div><dt>弱CHERRY / 弱AMMO</dt><dd>BONUS CHANCE発展に期待</dd></div>
+            <div><dt>強CHERRY / 強AMMO</dt><dd>高期待度の発展役</dd></div>
+            <div><dt>単CHERRY / リーチ目</dt><dd>BONUS確定</dd></div>
+            <div><dt>HERO CHANCE</dt><dd>PAY 0の特殊チャンス目</dd></div>
+          </dl>
         </section>
         <section class="menu-panel debug-only" data-menu-panel="debug">
           <div id="debugPanelHost"></div>

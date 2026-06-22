@@ -2350,3 +2350,62 @@ body.debug-position .menu-panel.debug-only.active{display:block !important}
   .mobile-control .meter b{font-size:12px !important}
   .menu-sheet .legend{grid-template-columns:1fr}
 }
+
+.reach-notice{
+  position:absolute;
+  inset:0;
+  z-index:18;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  visibility:hidden;
+  opacity:0;
+  background:rgba(0,0,0,.9);
+  pointer-events:none;
+}
+.reach-notice.on{
+  visibility:visible;
+  opacity:1;
+  animation:reachSilence .42s ease-out both;
+}
+.reach-notice span{
+  color:#ddd;
+  font-size:clamp(13px,2.2vw,22px);
+  font-weight:900;
+  letter-spacing:.12em;
+}
+.reach-notice b{
+  opacity:0;
+  color:#fff;
+  font-size:clamp(20px,4vw,40px);
+  letter-spacing:.08em;
+  text-shadow:0 0 12px #f00,0 2px 3px #000;
+}
+.reach-notice.confirm{
+  background:rgba(70,0,0,.72);
+  box-shadow:inset 0 0 48px rgba(255,0,0,.28);
+}
+.reach-notice.confirm b{opacity:1;animation:reachConfirm .35s ease-out both}
+.menu-test-command{
+  width:100%;
+  min-height:38px;
+  border:1px solid #a72831;
+  border-radius:6px;
+  background:#380a0e;
+  color:#fff;
+  font-weight:900;
+}
+.menu-guide{color:#ddd;font-size:12px;line-height:1.65}
+.menu-guide h3{padding-bottom:4px;border-bottom:1px solid rgba(190,35,40,.38);color:#fff}
+.menu-guide p{margin:6px 0 13px}
+.menu-guide .guide-examples{padding:7px;border-left:3px solid #a7242c;background:#12090a;color:#f0dede;font-size:11px}
+.menu-guide ol{margin:6px 0 14px;padding-left:1.5em}
+.menu-guide li{padding:3px 0}
+.guide-role-list{display:grid;gap:5px;margin:0}
+.guide-role-list div{display:grid;grid-template-columns:minmax(110px,.8fr) minmax(0,1.2fr);gap:8px;padding:7px;border:1px solid rgba(160,30,35,.35);border-radius:5px;background:#100b0c}
+.guide-role-list dt{font-weight:900;color:#fff}
+.guide-role-list dd{margin:0;color:#bba9a9}
+@keyframes reachSilence{from{opacity:0}to{opacity:1}}
+@keyframes reachConfirm{0%{opacity:0;transform:scale(.65)}70%{opacity:1;transform:scale(1.08)}100%{opacity:1;transform:scale(1)}}

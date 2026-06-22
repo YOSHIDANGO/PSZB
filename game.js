@@ -184,7 +184,7 @@ const els = {
  lcdStatus:$('#lcdStatus'), flash:$('#screenFlash'), pushBtn:$('#pushBtn'), settingSelect:$('#settingSelect'),
  prizeScene:$('#prizeScene'), prizeBox:$('#prizeBox'), prizeBurst:$('#prizeBurst'), prizeSymbol:$('#prizeSymbol'),
  bossBattle:$('#bossBattle'), bossSprite:$('#bossSprite'), bossRate:$('#bossRate'),
- longFreeze:$('#longFreeze'), longFreezeVideo:$('#longFreezeVideo'), cabinetEffectLayer:$('#cabinetEffectLayer')
+ longFreeze:$('#longFreeze'), longFreezeVideo:$('#longFreezeVideo'), reachNotice:$('#reachNotice'), cabinetEffectLayer:$('#cabinetEffectLayer')
 };
 
 const timers = {};
@@ -652,6 +652,7 @@ function bind(){
  $('#pushBtn').addEventListener('click', () => { soundManager.unlockAudio(); pushAction(); });
  document.querySelectorAll('.stop-hit').forEach(btn=>btn.addEventListener('click',()=>{ soundManager.unlockAudio(); stopReel(Number(btn.dataset.stop)); }));
  $('#resetBtn').addEventListener('click', () => { soundManager.unlockAudio(); reset(); });
+ $('#forceFreezeUiBtn')?.addEventListener('click', () => { soundManager.unlockAudio(); setMenuOpen(false); reserveLongFreeze(); });
  $('#menuBtn')?.addEventListener('click', () => setMenuOpen(true));
  $('#menuCloseBtn')?.addEventListener('click', () => setMenuOpen(false));
  els.menu?.addEventListener('click', event => { if(event.target === els.menu) setMenuOpen(false); });
@@ -979,6 +980,7 @@ function startLongFreeze(bonus){
 }
 function clearLongFreeze(){
  state.longFreeze = false;
+ clearReachNotice();
  soundManager.stopReelLoop();
  if(els.longFreeze) els.longFreeze.classList.remove('on','blackout');
  if(els.lcdWindow) els.lcdWindow.classList.remove('long-freeze-on');
@@ -1427,6 +1429,26 @@ function playEffect(effect,badge){
  else{setHero('idle');setEnemies('walk')}
 }
 function flash(){ els.flash.classList.remove('on'); void els.flash.offsetWidth; els.flash.classList.add('on'); }
+function clearReachNotice(){
+ clearTimer('reachNoticePhase');
+ clearTimer('reachNoticeEnd');
+ if(!els.reachNotice) return;
+ els.reachNotice.classList.remove('on','confirm');
+ els.reachNotice.setAttribute('aria-hidden','true');
+}
+function showReachMeReveal(){
+ if(!els.reachNotice) return;
+ clearReachNotice();
+ soundManager.duck(900, 0);
+ els.reachNotice.setAttribute('aria-hidden','false');
+ els.reachNotice.classList.add('on');
+ timers.reachNoticePhase = setTimeout(() => {
+   if(!els.reachNotice) return;
+   els.reachNotice.classList.add('confirm');
+   triggerCabinetEffect('flash-strong', 460);
+ }, 420);
+ timers.reachNoticeEnd = setTimeout(clearReachNotice, 1050);
+}
 
 function isRareRole(role){ return ['CHERRY','SUIKA','HERO'].includes(role); }
 function isBonusExpectation(result){ return !!(result?.bonus || result?.bonusReady || result?.hiddenBonus || result?.challenge); }
@@ -1553,6 +1575,7 @@ function leverOn(){
  if(!state.bonusActive && state.bet<3)return;
  soundManager.ensureContextualBgm();
  soundManager.playSe('lever');
+ clearReachNotice();
  clearCabinetEffects({keepMode:true});
  if(state.bonusActive) setCabinetMode('bonus');
  else if(state.door > 0) setCabinetMode('survive');
@@ -1820,6 +1843,10 @@ function shouldSuppressLeftRare(result){
 function leftCandidateHasRare(centerIndex){
  return getRowsForCenter(0, centerIndex).some(symbol => ['cherry','suika'].includes(symbol));
 }
+function leftCandidateShowsConfusingChanceSymbol(centerIndex){
+ if(!['BELL','REPLAY','BONUS_GAME'].includes(state.result?.role)) return false;
+ return getRowsForCenter(0, centerIndex).some(symbol => ['cherry','suika','hero'].includes(symbol));
+}
 function chooseTimedStopIndex(i){
  const arr = reelMap[i];
  const base = currentReelIndex(i);
@@ -1835,7 +1862,7 @@ function chooseTimedStopIndex(i){
    const candidates = [];
    for(let slip=0; slip<=maxSlip; slip++){
      const centerIndex = modIndex(base + slip, arr.length);
-     if(getRowsForCenter(i, centerIndex)[row] === desired && canCompleteWithoutRoleConflict(i, centerIndex)) candidates.push({centerIndex, slip});
+     if(getRowsForCenter(i, centerIndex)[row] === desired && !(i === 0 && leftCandidateShowsConfusingChanceSymbol(centerIndex)) && canCompleteWithoutRoleConflict(i, centerIndex)) candidates.push({centerIndex, slip});
    }
    if(candidates.length){
      if(state.stopDebug) state.stopDebug[['slipCountLeft','slipCountCenter','slipCountRight'][i]] = candidates[0].slip;
@@ -1844,7 +1871,7 @@ function chooseTimedStopIndex(i){
    if(['REPLAY','BELL','BONUS_GAME'].includes(state.result?.role)){
      for(let slip=MAX_SLIP + 1; slip<arr.length; slip++){
        const centerIndex = modIndex(base + slip, arr.length);
-       if(getRowsForCenter(i, centerIndex)[row] === desired && canCompleteWithoutRoleConflict(i, centerIndex)){
+       if(getRowsForCenter(i, centerIndex)[row] === desired && !(i === 0 && leftCandidateShowsConfusingChanceSymbol(centerIndex)) && canCompleteWithoutRoleConflict(i, centerIndex)){
          if(state.stopDebug) state.stopDebug[['slipCountLeft','slipCountCenter','slipCountRight'][i]] = slip;
          return centerIndex;
        }
@@ -1854,6 +1881,7 @@ function chooseTimedStopIndex(i){
  for(let slip=0; slip<=MAX_SLIP; slip++){
    const centerIndex = modIndex(base + slip, arr.length);
    const centerSymbol = getRowsForCenter(i, centerIndex)[1];
+   if(i === 0 && leftCandidateShowsConfusingChanceSymbol(centerIndex)) continue;
    if(i === 0 && shouldSuppressLeftRare(state.result) && (['cherry','suika'].includes(centerSymbol) || leftCandidateHasRare(centerIndex))){
      if(state.stopDebug) state.stopDebug.avoidedCherrySuikaOnMiss = true;
      continue;
@@ -2513,6 +2541,8 @@ function settle(){
  const stopDebug = analyzeStopResult(r);
  const rareDevelopment = resolveRareBonusChance(r, visibleResult);
  Object.assign(stopDebug, rareDevelopment);
+ const reachBonusReveal = !state.pendingBonus && !!r.bonus && (visibleResult.finalRole === 'REACH_ME' || stopDebug.isReachMe);
+ if(reachBonusReveal) showReachMeReveal();
  if(r.bonusGame){
    r.finalDisplayRole = 'BONUS_GAME';
    r.payoutRole = 'BONUS_GAME';
@@ -2597,7 +2627,7 @@ function settle(){
    if(state.presentation === 'freeze'){
      startLongFreeze(r.bonus);
    }else{
-     scheduleBonusNotice(r.bonus, contradiction ? 'weird' : null);
+     scheduleBonusNotice(r.bonus, reachBonusReveal ? 'delayed' : contradiction ? 'weird' : null);
    }
  }else if(r.challenge){
    state.credit+=state.pay; state.diff+=state.pay;
