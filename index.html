@@ -73,53 +73,76 @@
     <button class="hit-area stop-hit hit-stop2" data-stop="1" aria-label="STOP 2"></button>
     <button class="hit-area stop-hit hit-stop3" data-stop="2" aria-label="STOP 3"></button>
     <button id="leverBtn" class="hit-area hit-lever" aria-label="LEVER ON"></button>
-    <button id="resetBtn" class="reset-float">RESET</button>
-    <button id="forceFreezeUiBtn" class="force-freeze-float">NEXT<br>FREEZE</button>
-    <div class="sound-control" id="soundControl" aria-label="Sound control">
-      <button id="soundToggle" type="button">SOUND ON</button>
-      <input id="soundVolume" type="range" min="0" max="100" value="70" aria-label="Sound volume">
-    </div>
+  </section>
+
+  <section class="primary-controls" aria-label="補助操作">
+    <button id="menuBtn" type="button" aria-haspopup="dialog" aria-controls="appMenu">MENU</button>
+    <button id="soundToggle" type="button">SOUND ON</button>
+    <button id="resetBtn" type="button">RESET</button>
   </section>
 
   <section class="mobile-control">
     <div class="meter"><span>BET</span><b id="bet">0</b></div>
     <div class="meter"><span>PAY</span><b id="pay">0</b></div>
     <div class="meter"><span>差枚</span><b id="diff">0</b></div>
-    <div class="meter"><span>合算</span><b id="bonusRate">-</b></div>
-    <div class="meter"><span>ベル</span><b id="bellRate">-</b></div>
     <div class="meter"><span>状態</span><b id="modeText">通常</b></div>
+    <div class="meter"><span>BELL</span><b id="bellCount">0</b></div>
     <div class="meter"><span>SBB</span><b id="sbbCount">0</b></div>
     <div class="meter"><span>SURVIVE</span><b id="doorCount">-</b></div>
+    <div class="meter"><span>合算</span><b id="bonusRate">-</b></div>
   </section>
 
-  <aside class="sub-panel" id="subPanel">
-    <section class="card spec-card">
-      <h2>TYPE-A SPEC</h2>
-      <label class="setting-row">設定
-        <select id="settingSelect">
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
-        </select>
-      </label>
-      <p class="spec-note">小役重複 / SBB・BB・REG / SURVIVE ZONE搭載</p>
+  <div class="menu-overlay" id="appMenu" hidden>
+    <section class="menu-sheet" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
+      <header class="menu-header">
+        <h2 id="menuTitle">DIE YET MENU</h2>
+        <button id="menuCloseBtn" type="button" aria-label="メニューを閉じる">×</button>
+      </header>
+      <nav class="menu-tabs" aria-label="メニュー項目">
+        <button class="active" type="button" data-menu-tab="info">基本情報</button>
+        <button type="button" data-menu-tab="history">履歴</button>
+        <button type="button" data-menu-tab="symbols">図柄</button>
+        <button type="button" data-menu-tab="sound">サウンド</button>
+        <button class="debug-only" type="button" data-menu-tab="debug">DEBUG</button>
+      </nav>
+      <div class="menu-body">
+        <section class="menu-panel active" data-menu-panel="info">
+          <div class="menu-summary">
+            <div><span>状態</span><b id="menuModeText">通常</b></div>
+            <div><span>ステージ</span><b id="menuStageText">廃ビル通路</b></div>
+            <div><span>BB</span><b id="menuBigCount">0</b></div>
+            <div><span>REG</span><b id="menuRegCount">0</b></div>
+            <div><span>SBB</span><b id="menuSbbCount">0</b></div>
+            <div><span>BELL確率</span><b id="bellRate">-</b></div>
+          </div>
+          <label class="setting-row">設定
+            <select id="settingSelect">
+              <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+              <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+            </select>
+          </label>
+          <p class="spec-note">小役重複 / SBB・BB・REG / SURVIVE ZONE</p>
+          <h3>STAGE</h3>
+          <div class="stage-buttons" id="stageButtons"></div>
+        </section>
+        <section class="menu-panel" data-menu-panel="history">
+          <ol id="history" class="menu-history"></ol>
+        </section>
+        <section class="menu-panel" data-menu-panel="symbols">
+          <div class="legend" id="symbolLegend"></div>
+        </section>
+        <section class="menu-panel" data-menu-panel="sound">
+          <div class="menu-sound-control">
+            <button id="menuSoundToggle" type="button">SOUND ON</button>
+            <label>音量 <input id="soundVolume" type="range" min="0" max="100" value="70"></label>
+          </div>
+        </section>
+        <section class="menu-panel debug-only" data-menu-panel="debug">
+          <div id="debugPanelHost"></div>
+        </section>
+      </div>
     </section>
-    <section class="card">
-      <h2>STAGE</h2>
-      <div class="stage-buttons" id="stageButtons"></div>
-    </section>
-    <section class="card">
-      <h2>履歴</h2>
-      <ol id="history"></ol>
-    </section>
-    <section class="card">
-      <h2>SYMBOL</h2>
-      <div class="legend" id="symbolLegend"></div>
-    </section>
-  </aside>
+  </div>
 </main>
 <script src="game.js"></script>
 </body>

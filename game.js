@@ -179,7 +179,8 @@ const heroDebugState = {
 
 const els = {
  reels:[...document.querySelectorAll('.reel')], credit:$('#credit'), bet:$('#bet'), pay:$('#pay'), diff:$('#diff'), games:$('#games'), big:$('#bigCount'), reg:$('#regCount'), sbb:$('#sbbCount'), door:$('#doorCount'),
- bonusRate:$('#bonusRate'), bellRate:$('#bellRate'), modeText:$('#modeText'), history:$('#history'), lcdWindow:$('.lcd-window'), stageBg:$('#stageBg'), hero:$('#hero'), enemyA:$('#enemyA'), enemyB:$('#enemyB'), enemyC:$('#enemyC'),
+ bonusRate:$('#bonusRate'), bellRate:$('#bellRate'), bellCount:$('#bellCount'), modeText:$('#modeText'), history:$('#history'), lcdWindow:$('.lcd-window'), stageBg:$('#stageBg'), hero:$('#hero'), enemyA:$('#enemyA'), enemyB:$('#enemyB'), enemyC:$('#enemyC'),
+ menu:$('#appMenu'), menuModeText:$('#menuModeText'), menuStageText:$('#menuStageText'), menuBigCount:$('#menuBigCount'), menuRegCount:$('#menuRegCount'), menuSbbCount:$('#menuSbbCount'),
  lcdStatus:$('#lcdStatus'), flash:$('#screenFlash'), pushBtn:$('#pushBtn'), settingSelect:$('#settingSelect'),
  prizeScene:$('#prizeScene'), prizeBox:$('#prizeBox'), prizeBurst:$('#prizeBurst'), prizeSymbol:$('#prizeSymbol'),
  bossBattle:$('#bossBattle'), bossSprite:$('#bossSprite'), bossRate:$('#bossRate'),
@@ -341,8 +342,10 @@ const soundManager = (() => {
  }
  function updateUi(){
    const toggle = $('#soundToggle');
+   const menuToggle = $('#menuSoundToggle');
    const slider = $('#soundVolume');
    if(toggle) toggle.textContent = data.muted ? 'SOUND OFF' : (data.unlocked ? 'SOUND ON' : 'SOUND READY');
+   if(menuToggle) menuToggle.textContent = data.muted ? 'SOUND OFF' : (data.unlocked ? 'SOUND ON' : 'SOUND READY');
    if(slider) slider.value = String(Math.round(data.volume * 100));
    updateSoundDebug();
  }
@@ -629,6 +632,17 @@ function symbolImgHtml(k, alt=symbolDefs[k].label){
  return `<img src="${s.src}" alt="${alt}">`;
 }
 function buildStrip(arr){ return [...arr,...arr,...arr].map(k=>`<div class="symbol">${symbolImgHtml(k)}</div>`).join(''); }
+function setMenuOpen(open){
+ if(!els.menu) return;
+ els.menu.hidden = !open;
+ document.body.classList.toggle('menu-open', open);
+ $('#menuBtn')?.setAttribute('aria-expanded', String(open));
+ if(open) $('#menuCloseBtn')?.focus();
+}
+function selectMenuTab(name){
+ document.querySelectorAll('[data-menu-tab]').forEach(button => button.classList.toggle('active', button.dataset.menuTab === name));
+ document.querySelectorAll('[data-menu-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.menuPanel === name));
+}
 function bind(){
  const unlock = () => { soundManager.unlockAudio(); requestMobileFullscreen(); };
  document.addEventListener('pointerdown', unlock, {once:true});
@@ -638,8 +652,13 @@ function bind(){
  $('#pushBtn').addEventListener('click', () => { soundManager.unlockAudio(); pushAction(); });
  document.querySelectorAll('.stop-hit').forEach(btn=>btn.addEventListener('click',()=>{ soundManager.unlockAudio(); stopReel(Number(btn.dataset.stop)); }));
  $('#resetBtn').addEventListener('click', () => { soundManager.unlockAudio(); reset(); });
- $('#forceFreezeUiBtn')?.addEventListener('click', () => { soundManager.unlockAudio(); reserveLongFreeze(); });
+ $('#menuBtn')?.addEventListener('click', () => setMenuOpen(true));
+ $('#menuCloseBtn')?.addEventListener('click', () => setMenuOpen(false));
+ els.menu?.addEventListener('click', event => { if(event.target === els.menu) setMenuOpen(false); });
+ document.querySelectorAll('[data-menu-tab]').forEach(button => button.addEventListener('click', () => selectMenuTab(button.dataset.menuTab)));
+ document.addEventListener('keydown', event => { if(event.key === 'Escape' && !els.menu?.hidden) setMenuOpen(false); });
  $('#soundToggle')?.addEventListener('click', () => { soundManager.unlockAudio(); soundManager.setMuted(!soundManager.getState().muted); });
+ $('#menuSoundToggle')?.addEventListener('click', () => { soundManager.unlockAudio(); soundManager.setMuted(!soundManager.getState().muted); });
  $('#soundVolume')?.addEventListener('input', e => { soundManager.setVolume(Number(e.target.value) / 100); });
  if(els.settingSelect){
    els.settingSelect.value = String(state.setting);
@@ -2661,8 +2680,15 @@ function pushHistory(role,pay){
 function update(){
  els.credit.textContent=state.credit; els.bet.textContent=state.bet; els.pay.textContent=state.pay; els.diff.textContent=state.diff; els.games.textContent=state.games; els.big.textContent=state.big; els.reg.textContent=state.reg;
  if(els.sbb) els.sbb.textContent=state.sbb; if(els.door) els.door.textContent=state.door>0?state.door:'-';
+ if(els.bellCount) els.bellCount.textContent=state.bell;
  const bt=state.big+state.reg+state.sbb; els.bonusRate.textContent=bt?`1/${Math.max(1,Math.round(state.games/bt))}`:'-'; els.bellRate.textContent=state.bell?`1/${(state.games/state.bell).toFixed(1)}`:'-';
- els.modeText.textContent=state.bonusActive?`${state.bonusActive.label} ${state.bonusActive.remaining}`:state.challenge?'BONUS CHANCE':state.pendingBonus?`${bonusInfo[state.pendingBonus].label}成立`:state.spinning?'回転中':state.door>0?`SURVIVE ${state.door}`:'通常';
+ const modeLabel=state.bonusActive?`${bonusDisplayName(state.bonusActive.type)} ${state.bonusActive.remaining}`:state.challenge?'BONUS CHANCE':state.pendingBonus?`${bonusDisplayName(state.pendingBonus)}成立`:state.spinning?'回転中':state.door>0?`SURVIVE ${state.door}`:'通常';
+ els.modeText.textContent=modeLabel;
+ if(els.menuModeText) els.menuModeText.textContent=modeLabel;
+ if(els.menuStageText) els.menuStageText.textContent=backgrounds[state.stage]?.label || '-';
+ if(els.menuBigCount) els.menuBigCount.textContent=state.big;
+ if(els.menuRegCount) els.menuRegCount.textContent=state.reg;
+ if(els.menuSbbCount) els.menuSbbCount.textContent=state.sbb;
  els.history.replaceChildren(...state.history.map(text => { const li=document.createElement('li'); li.textContent=text; return li; }));
  document.querySelectorAll('.stop-hit').forEach((b,i)=>b.disabled=!state.spinning||state.stopped[i]||state.settling);
  $('#leverBtn').disabled=state.spinning||state.settling||(!state.bonusActive&&state.bet<3)||state.longFreeze; $('#maxBetBtn').disabled=state.spinning||state.settling||state.bet===3||state.credit<1||!!state.bonusActive||state.longFreeze; if(els.pushBtn) els.pushBtn.disabled=state.longFreeze||state.settling||((!!state.challenge && !state.challenge.awaitingPush) && !state.awaitingPushNotice);
@@ -2916,7 +2942,7 @@ function initCabinetDebugPanel(){
 }
 function renderDebugTools(){
  if(!document.body.classList.contains('debug-position') || $('#reelExportBtn')) return;
- const panel = $('#subPanel');
+ const panel = $('#debugPanelHost');
  if(!panel) return;
  panel.insertAdjacentHTML('beforeend', `<section class="card debug-tools"><h2>DEBUG</h2><button id="forceLongFreezeBtn" type="button">NEXT LONG FREEZE</button><button id="reelExportBtn" type="button">EXPORT REEL PNG</button></section>
  <section class="card debug-tools hero-debug">
