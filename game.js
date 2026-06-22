@@ -147,15 +147,21 @@ function createStopDebug(){
    visibleLineSymbols:'-', evaluatedLineSymbols:'-', internalRole:'-', finalDisplayRole:'-', payoutRole:'-',
    bonusLineMatched:false, isInvalidBonusLine:false, pendingBonusGameCount:0, targetBonusSymbol:'-',
    bonusAimAssistLevel:0, bonusCanBePulledLeft:false, bonusCanBePulledCenter:false, bonusCanBePulledRight:false,
-   logDisplayName:'-', reachMeDisplayName:'-', bonusChanceResult:'-'
+   logDisplayName:'-', reachMeDisplayName:'-', bonusChanceResult:'-', visibleRole:'-', payoutAmount:0,
+   activePaylineName:'-', activePaylineSymbols:'-', visibleTopLineSymbols:'-', visibleMiddleLineSymbols:'-', visibleBottomLineSymbols:'-',
+   dropSymbol:'-', isRoleMismatch:false, mismatchReason:'-', isReplay:false, replayLine:'-',
+   replayHandledAsReplay:false, replayPaysZero:true, replayAutoBetEnabled:false,
+   isRareRole:false, isChanceRole:false, isHeroChance:false, isBonusChanceCandidate:false,
+   bonusChanceRoll:'-', bonusChanceHit:false, bonusChanceRate:0, bonusChanceReason:'-', rareRoleName:'-'
  };
 }
 const state = {
   credit:50, bet:0, pay:0, diff:0, games:0, big:0, reg:0, sbb:0, bell:0, spinning:false,
   stopped:[true,true,true], result:null, center:['blue7','bell','cherry'], history:[], stage:0,
-  enemyA:'highschool_girl', enemyB:'salaryman', pendingBonus:null, pendingBonusGameCount:0, bonusReady:false, setting:1, door:0, doorHits:0,
+  enemyA:'highschool_girl', enemyB:'salaryman', enemyC:'security_guard', zombieCrossCount:1, pendingBonus:null, pendingBonusGameCount:0, bonusReady:false, setting:1, door:0, doorHits:0,
   presentation:'idle', currentSceneCategory:'idle', currentDropSymbol:'-', currentEnemyAction:'idle', currentBossPhase:'-', currentBossAction:'-', heroCostume:'school', heroAction:'idle', heroFrameIndex:0, heroFrameTotal:1, heroFramePath:'assets/sprites/hero/school/00.png', heroLoadStatus:'OK',
   quietGames:0, contradiction:false, settling:false, performancePhase:0, awaitingPushNotice:null, nextGameNotice:null,
+  rareNoChallengeCount:0,
   challenge:null, bonusActive:null, reelBases:[0,0,0], stopIndices:[0,0,0], spinStartedAt:0, longFreeze:false, forceLongFreeze:false,
   currentCabinetMode:'normal', lastCabinetEffect:'-', cabinetBlackoutActive:false, pushGlowActive:false,
   stopDebug:createStopDebug()
@@ -173,7 +179,7 @@ const heroDebugState = {
 
 const els = {
  reels:[...document.querySelectorAll('.reel')], credit:$('#credit'), bet:$('#bet'), pay:$('#pay'), diff:$('#diff'), games:$('#games'), big:$('#bigCount'), reg:$('#regCount'), sbb:$('#sbbCount'), door:$('#doorCount'),
- bonusRate:$('#bonusRate'), bellRate:$('#bellRate'), modeText:$('#modeText'), history:$('#history'), lcdWindow:$('.lcd-window'), stageBg:$('#stageBg'), hero:$('#hero'), enemyA:$('#enemyA'), enemyB:$('#enemyB'),
+ bonusRate:$('#bonusRate'), bellRate:$('#bellRate'), modeText:$('#modeText'), history:$('#history'), lcdWindow:$('.lcd-window'), stageBg:$('#stageBg'), hero:$('#hero'), enemyA:$('#enemyA'), enemyB:$('#enemyB'), enemyC:$('#enemyC'),
  lcdStatus:$('#lcdStatus'), flash:$('#screenFlash'), pushBtn:$('#pushBtn'), settingSelect:$('#settingSelect'),
  prizeScene:$('#prizeScene'), prizeBox:$('#prizeBox'), prizeBurst:$('#prizeBurst'), prizeSymbol:$('#prizeSymbol'),
  bossBattle:$('#bossBattle'), bossSprite:$('#bossSprite'), bossRate:$('#bossRate'),
@@ -244,10 +250,10 @@ function cabinetRareEffect(debug, result){
    setTimeout(()=>triggerCabinetEffect('flash-strong', 520), 360);
    return;
  }
- if(debug?.isStrongCherry || debug?.isStrongSuika || debug?.isSpecialSuika || result?.role === 'HERO'){
+ if(debug?.isStrongCherry || debug?.isStrongSuika || debug?.isSpecialSuika || roleFamily(result?.finalDisplayRole || result?.role) === 'HERO'){
    triggerCabinetEffect('rare-strong', 980);
    triggerCabinetEffect('shake', 420);
-   if(debug?.isSpecialSuika || result?.role === 'HERO') triggerCabinetEffect('flash-strong', 460);
+   if(debug?.isSpecialSuika || roleFamily(result?.finalDisplayRole || result?.role) === 'HERO') triggerCabinetEffect('flash-strong', 460);
    return;
  }
  if(debug?.isWeakSuika) triggerCabinetEffect('suika-weak', 620);
@@ -702,11 +708,24 @@ function chooseRoamingStage(){
  for(let i=0;i<weights.length;i++){ if(r < weights[i]) return i; r -= weights[i]; }
  return 0;
 }
-function randomizeActors(){ state.enemyA = enemyNames[rand(enemyNames.length)]; do{state.enemyB = enemyNames[rand(enemyNames.length)]}while(state.enemyB===state.enemyA); els.enemyA.classList.add('face-left'); els.enemyB.classList.add('face-left'); }
+function randomizeActors(){
+ state.enemyA = enemyNames[rand(enemyNames.length)];
+ do{state.enemyB = enemyNames[rand(enemyNames.length)]}while(state.enemyB===state.enemyA);
+ do{state.enemyC = enemyNames[rand(enemyNames.length)]}while(state.enemyC===state.enemyA || state.enemyC===state.enemyB);
+ [els.enemyA,els.enemyB,els.enemyC].forEach(enemy => enemy?.classList.add('face-left'));
+}
+function setHeroActionClass(action){
+ if(!els.hero) return;
+ const normalized = normalizeHeroAction(action);
+ els.hero.classList.remove('anim-idle','anim-run','anim-attack','anim-shoot','anim-special','anim-reveal','anim-hit','anim-down');
+ const cls = action === 'special' ? 'anim-special' : normalized === 'run' ? 'anim-run' : normalized === 'bat_attack' ? 'anim-attack' : normalized === 'shoot' ? 'anim-shoot' : normalized === 'hit' ? 'anim-hit' : normalized === 'down' ? 'anim-down' : 'anim-idle';
+ els.hero.classList.add(cls);
+}
 function setHero(action, costume=state.heroCostume){
  const resolvedCostume = resolveHeroCostume(costume);
  state.heroCostume = resolvedCostume;
  state.heroAction = action === 'rush' || action === 'special' ? action : normalizeHeroAction(action);
+ setHeroActionClass(action);
  playFrames(els.hero, heroFrames(action, resolvedCostume), heroActionFps(action), 'hero', true);
  updateHeroRuntimeDebug();
 }
@@ -714,13 +733,24 @@ function setHeroOnce(action, costume=state.heroCostume, next='idle', delay=520){
  const resolvedCostume = resolveHeroCostume(costume);
  state.heroCostume = resolvedCostume;
  state.heroAction = normalizeHeroAction(action);
+ setHeroActionClass(action);
  playFrames(els.hero, heroFrames(action, resolvedCostume), heroActionFps(action), 'hero', false);
  clearTimer('heroOnce');
  timers.heroOnce = setTimeout(() => setHero(next, resolvedCostume), delay);
  updateHeroRuntimeDebug();
 }
-function setEnemies(action){ state.currentEnemyAction = action; const loop=action!=='down'; playFrames(els.enemyA, enemySeq(state.enemyA,action), action==='walk'?5:7, 'enemyA', loop); playFrames(els.enemyB, enemySeq(state.enemyB,action), action==='walk'?4:6, 'enemyB', loop); }
-const normalSceneClasses = ['scene-idle','scene-hint','scene-combat','scene-zombie','scene-run','scene-crate'];
+function setEnemies(action){
+ state.currentEnemyAction = action;
+ const loop = action === 'walk' || action === 'run' || action === 'idle';
+ const className = action === 'walk' || action === 'run' ? 'anim-walk' : action === 'attack' ? 'anim-attack' : action === 'hit' ? 'anim-hit' : action === 'down' ? 'anim-down' : 'anim-idle';
+ [[els.enemyA,state.enemyA,'enemyA',5],[els.enemyB,state.enemyB,'enemyB',4],[els.enemyC,state.enemyC,'enemyC',4]].forEach(([enemy,name,timer,fps]) => {
+   if(!enemy) return;
+   enemy.classList.remove('anim-idle','anim-walk','anim-attack','anim-hit','anim-down');
+   enemy.classList.add(className,'face-left');
+   playFrames(enemy, enemySeq(name,action), action === 'walk' ? fps : 7, timer, loop);
+ });
+}
+const normalSceneClasses = ['scene-idle','scene-hint','scene-combat','scene-zombie','scene-run','scene-crate','zombie-count-1','zombie-count-2','zombie-count-3'];
 function clearNormalScene(){
  if(!els.lcdWindow) return;
  els.lcdWindow.classList.remove(...normalSceneClasses);
@@ -731,10 +761,28 @@ function setNormalScene(scene='idle'){
  els.lcdWindow.classList.add(`scene-${scene}`);
  state.currentSceneCategory = scene;
 }
-function setActorShown(heroShown=true, enemyAShown=false, enemyBShown=false){
+function setActorShown(heroShown=true, enemyAShown=false, enemyBShown=false, enemyCShown=false){
  if(els.hero) els.hero.style.visibility = heroShown ? 'visible' : 'hidden';
  if(els.enemyA) els.enemyA.style.visibility = enemyAShown ? 'visible' : 'hidden';
  if(els.enemyB) els.enemyB.style.visibility = enemyBShown ? 'visible' : 'hidden';
+ if(els.enemyC) els.enemyC.style.visibility = enemyCShown ? 'visible' : 'hidden';
+}
+function zombieStrengthCount(result=state.result){
+ const strength = result?.roleStrength || '';
+ if(isBonusExpectation(result) || result?.role === 'HERO' || ['CHERRY_STRONG','CHERRY_SINGLE','SUIKA_STRONG','SUIKA_SPECIAL'].includes(strength)) return 3;
+ if(['BELL','CHERRY','SUIKA'].includes(result?.role)) return 2;
+ return 1;
+}
+function configureZombieCrossing(result=state.result){
+ const count = zombieStrengthCount(result);
+ state.zombieCrossCount = count;
+ if(els.lcdWindow){
+   els.lcdWindow.classList.remove('zombie-count-1','zombie-count-2','zombie-count-3');
+   els.lcdWindow.classList.add(`zombie-count-${count}`);
+ }
+ setActorShown(false, true, count >= 2, count >= 3);
+ setEnemies('walk');
+ return count;
 }
 function normalSceneFor(effect){
  if(['item','item_get','supply_check','medkit_notice','ammo_event','ammo_support'].includes(effect)) return 'crate';
@@ -749,7 +797,7 @@ function prizeTypeFor(effect, result={}){
  if(['enemy_walk'].includes(effect)) return 'horde';
  if(['item','item_get','supply_check','medkit_notice','ammo_event','ammo_support'].includes(effect)) return 'crate';
  if(['cherry_notice','punch','shoot','warning','survive'].includes(effect)) return 'drop';
- return result.role === 'REPLAY' ? 'horde' : 'drop';
+ return roleFamily(result.finalDisplayRole || result.visibleRole || result.role) === 'REPLAY' ? 'horde' : 'drop';
 }
 function clearBossBattle(){
  if(!els.bossBattle) return;
@@ -1009,6 +1057,10 @@ function showBossBattle(boss, phase='intro'){
 }
 function clearPrizeScene(){
  if(!els.prizeScene) return;
+ clearTimer('combatShoot');
+ clearTimer('combatHit');
+ clearTimer('combatDown');
+ clearTimer('combatDrop');
  soundManager.stopTransientSe();
  els.prizeScene.className = 'prize-scene';
  state.currentDropSymbol = '-';
@@ -1019,12 +1071,31 @@ function startPrizeScene(type='crate'){
  els.prizeScene.className = `prize-scene ${type} ready`;
  if(els.prizeSymbol) els.prizeSymbol.removeAttribute('src');
 }
+function dropSymbolForFinalResult(result){
+ const role = result?.finalDisplayRole || result?.visibleRole || result?.role || 'MISS';
+ const family = roleFamily(role);
+ if(family === 'BELL') return 'bell';
+ if(family === 'REPLAY') return 'replay';
+ if(family === 'CHERRY') return 'cherry';
+ if(family === 'SUIKA') return 'suika';
+ if(family === 'HERO') return 'hero';
+ if(role === 'BONUS_READY' && state.pendingBonus) return bonusInfo[state.pendingBonus]?.center?.[0] || null;
+ if(family === 'REACH_ME' || result?.bonus || result?.bonusReady || state.pendingBonus){
+   const bonus = result?.bonus || result?.bonusReady || state.pendingBonus;
+   return bonus ? bonusInfo[bonus]?.center?.[0] || 'hero' : 'hero';
+ }
+ return null;
+}
 function revealPrizeScene(result){
  if(!els.prizeScene || !result) return;
  const type = prizeTypeFor(state.presentation, result);
- const lineSymbol = result.grid && result.line?.rows?.length ? result.grid[1][result.line.rows[1]] : null;
- const key = result.bonus ? bonusInfo[result.bonus].center[0] : (lineSymbol || result.center?.[1] || result.center?.[0]);
- const symbol = symbolDefs[key] || symbolDefs.replay;
+ const key = dropSymbolForFinalResult(result);
+ if(!key || !symbolDefs[key]){
+   clearPrizeScene();
+   return;
+ }
+ const symbol = symbolDefs[key];
+ const resolvedFamily = roleFamily(result.finalDisplayRole || result.visibleRole || result.role);
  state.currentDropSymbol = key || '-';
  if(els.prizeSymbol){
    els.prizeSymbol.src = symbol.src;
@@ -1033,16 +1104,28 @@ function revealPrizeScene(result){
  if(!state.bonusActive && !state.challenge){
    if(type === 'crate'){
      setActorShown(true, false, false);
-     soundManager.playSe(result.role === 'SUIKA' ? 'shoot' : 'hit');
-     setHeroOnce(result.role === 'SUIKA' ? 'shoot' : 'melee', state.heroCostume, 'idle', 520);
+     soundManager.playSe(resolvedFamily === 'SUIKA' ? 'shoot' : 'hit');
+     setHeroOnce(resolvedFamily === 'SUIKA' ? 'shoot' : 'melee', state.heroCostume, 'idle', 520);
      setTimeout(()=>soundManager.playSe('item'), 260);
    }else if(type === 'drop'){
-     setActorShown(true, true, ['HERO'].includes(result.role));
-     soundManager.playSe(result.role === 'SUIKA' ? 'shoot' : 'hit');
-     setHeroOnce(result.role === 'SUIKA' ? 'shoot' : 'melee', state.heroCostume, 'idle', 520);
-     setEnemies('hit');
-     setTimeout(()=>{ setEnemies('down'); soundManager.playSe('zombie_die'); }, 340);
-     setTimeout(()=>soundManager.playSe('item'), 560);
+     if(!state.bonusActive && !state.challenge) setNormalScene('combat');
+     const enemyCount = ['CHERRY','SUIKA','HERO'].includes(resolvedFamily) && ['CHERRY_STRONG','CHERRY_SINGLE','SUIKA_STRONG','SUIKA_SPECIAL','HERO','HERO_CHANCE'].includes(result.finalDisplayRole) ? 2 : 1;
+     setActorShown(true, true, enemyCount >= 2, false);
+     setHero('idle', state.heroCostume);
+     setEnemies('idle');
+     timers.combatShoot = setTimeout(() => {
+       soundManager.playSe('shoot');
+       setHeroOnce('shoot', state.heroCostume, 'idle', 620);
+     }, 140);
+     timers.combatHit = setTimeout(() => {
+       soundManager.playSe('hit');
+       setEnemies('hit');
+     }, 360);
+     timers.combatDown = setTimeout(() => {
+       soundManager.playSe('zombie_die');
+       setEnemies('down');
+     }, 620);
+     timers.combatDrop = setTimeout(()=>soundManager.playSe('item'), 780);
    }else if(type === 'horde'){
      setActorShown(false, false, false);
      soundManager.playSe('zombie_walk');
@@ -1210,7 +1293,7 @@ function lineText(result){
 function shouldRevealPrize(result){
  if(!result || result.bonusGame) return false;
  if(result.bonus || result.bonusReady) return true;
- return ['REPLAY','BELL','SUIKA','CHERRY','HERO'].includes(result.role);
+ return ['REPLAY','BELL','SUIKA','CHERRY','HERO'].includes(roleFamily(result.finalDisplayRole || result.visibleRole || result.role));
 }
 
 function actorClasses(effect){
@@ -1270,10 +1353,9 @@ function playNormalEffect(effect,badge){
    }, 1350);
  }else if(scene === 'zombie'){
    startPrizeScene('horde');
-   setActorShown(false, true, ['SUIKA','CHERRY','HERO'].includes(state.result?.role) || isBonusExpectation(state.result));
    setHero('idle');
    soundManager.playSe('zombie_walk');
-   setEnemies('walk');
+   configureZombieCrossing(state.result);
  }else if(scene === 'crate'){
    startPrizeScene('crate');
    setActorShown(true, false, false);
@@ -1281,10 +1363,11 @@ function playNormalEffect(effect,badge){
    setEnemies('idle');
  }else if(scene === 'combat'){
    clearPrizeScene();
-   setActorShown(true, true, ['warning','survive'].includes(effect));
+   const enemyCount = zombieStrengthCount(state.result);
+   setActorShown(true, true, enemyCount >= 2, false);
    soundManager.playSe('moan');
    setHero('idle', state.heroCostume);
-   setEnemies('walk');
+   setEnemies('idle');
  }
 }
 function playEffect(effect,badge){
@@ -1350,10 +1433,12 @@ function playStopPerformance(stopCount){
      setHero('idle');
      setEnemies('walk');
    }else if(perf === 'enemy_walk'){
-     startPrizeScene('horde');
-     setActorShown(false, true, ['SUIKA','CHERRY','HERO'].includes(result.role) || isBonusExpectation(result));
-     soundManager.playSe('zombie_walk');
-     setEnemies('walk');
+     if(state.currentSceneCategory !== 'zombie'){
+       setNormalScene('zombie');
+       startPrizeScene('horde');
+       soundManager.playSe('zombie_walk');
+       configureZombieCrossing(result);
+     }
    }else if(perf === 'shadow' || perf === 'warning' || perf === 'survive'){
      setLcdMood('shadow', 760);
      setHero('idle');
@@ -1460,6 +1545,7 @@ function leverOn(){
  if(!state.pendingBonus) clearBonusConfirm();
  const doorActive = state.door > 0;
  els.lcdStatus.textContent='';
+ if(state.games === 0) state.rareNoChallengeCount = 0;
  state.games++;
  if(state.pendingBonus) state.pendingBonusGameCount++;
  state.reelBases = reelMap.map(arr => rand(arr.length));
@@ -2111,6 +2197,15 @@ function visiblePayLines(result){
    symbols:line.rows.map((row, reelIndex) => result.grid[reelIndex]?.[row] || '-')
  }));
 }
+function roleFamily(role){
+ if(!role) return 'MISS';
+ if(role.startsWith('CHERRY')) return 'CHERRY';
+ if(role.startsWith('SUIKA')) return 'SUIKA';
+ if(role.startsWith('HERO')) return 'HERO';
+ if(['BONUS_READY','INVALID_BONUS_LINE'].includes(role)) return 'BONUS';
+ if(['REACH_ME','PENDING_REACH'].includes(role)) return 'REACH_ME';
+ return role;
+}
 function evaluateVisibleResult(result){
  const lines = visiblePayLines(result);
  const triples = symbol => lines.find(item => item.symbols.every(value => value === symbol));
@@ -2131,21 +2226,34 @@ function evaluateVisibleResult(result){
  }else if(triples('bell')){
    hitLine = triples('bell').line; finalRole = payoutRole = 'BELL'; pay = 8;
  }else if(result?.center?.[0] === 'cherry'){
-   finalRole = payoutRole = 'CHERRY'; pay = 2;
+   const center = result.center;
+   finalRole = center[1] === 'cherry' && center[2] === 'cherry' ? 'CHERRY_STRONG' : center[1] === 'cherry' ? 'CHERRY_WEAK' : 'CHERRY_SINGLE';
+   payoutRole = finalRole === 'CHERRY_SINGLE' ? 'NONE' : 'CHERRY';
+   pay = finalRole === 'CHERRY_SINGLE' ? 0 : 2;
+   hitLine = triples('cherry')?.line || null;
  }else if(triples('suika') || result?.center?.[0] === 'suika'){
    hitLine = triples('suika')?.line || null;
-   finalRole = payoutRole = 'SUIKA';
-   pay = triples('suika') ? 5 : 0;
+   finalRole = triples('suika') ? 'SUIKA_WEAK' : result.center.includes('hero') ? 'SUIKA_SPECIAL' : result.center[1] === 'suika' ? 'SUIKA_STRONG' : 'SUIKA_CHANCE';
+   payoutRole = finalRole === 'SUIKA_WEAK' ? 'SUIKA' : 'NONE';
+   pay = finalRole === 'SUIKA_WEAK' ? 5 : 0;
  }else if(result?.center?.includes('hero')){
    finalRole = result.role === 'HERO' ? 'HERO' : 'HERO_CHANCE';
-   payoutRole = result.role === 'HERO' ? 'HERO' : 'NONE';
-   pay = result.role === 'HERO' ? 3 : 0;
+   payoutRole = 'NONE';
+   pay = 0;
  }else if(result?.isReachMe || matchedReachMeName(result?.center || []) !== '-'){
    finalRole = 'REACH_ME';
    payoutRole = 'NONE';
  }
  const lineSummary = lines.map(item => `${payLineDisplayNames[item.line.key] || item.line.key}:${item.symbols.join('/')}`);
- return {lines, lineSummary, bonusMatch, matchingBonus, invalidBonus, finalRole, payoutRole, pay, hitLine};
+ const evaluationLine = hitLine || (result?.line?.rows?.length === 3 ? result.line : null);
+ const activeSymbols = evaluationLine ? evaluationLine.rows.map((row, reelIndex) => result.grid?.[reelIndex]?.[row] || '-') : result?.center || [];
+ const activePaylineName = evaluationLine ? payLineDisplayNames[evaluationLine.key] || evaluationLine.label || evaluationLine.key : '-';
+ const internalFamily = roleFamily(result?.role);
+ const visibleFamily = roleFamily(finalRole);
+ const comparable = ['REPLAY','BELL','CHERRY','SUIKA','HERO','MISS'].includes(internalFamily);
+ const isRoleMismatch = comparable && internalFamily !== visibleFamily && !(internalFamily === 'MISS' && ['REACH_ME','HERO'].includes(visibleFamily));
+ const mismatchReason = isRoleMismatch ? `内部役:${internalFamily} / 表示役:${visibleFamily}` : '-';
+ return {lines, lineSummary, bonusMatch, matchingBonus, invalidBonus, visibleRole:finalRole, finalRole, payoutRole, pay, hitLine:evaluationLine, activeSymbols, activePaylineName, isRoleMismatch, mismatchReason};
 }
 function matchedReachMeName(symbols){
  const hit = reachMePatterns.find(p => p.symbols.every((symbol, i) => symbol === symbols[i]));
@@ -2153,12 +2261,13 @@ function matchedReachMeName(symbols){
 }
 function displayRoleName(role, debug={}){
  const strengthNames = {
-   CHERRY_WEAK:'弱チェリー', CHERRY_STRONG:'強チェリー', CHERRY_SINGLE:'単チェリー',
-   SUIKA_WEAK:'弱スイカ', SUIKA_STRONG:'強スイカ', SUIKA_SPECIAL:'特殊スイカ',
-   HERO_CHANCE:'HEROチャンス目', REACH_ME:'リーチ目'
+   CHERRY_WEAK:'弱チェリー', CHERRY_STRONG:'強チェリー CHANCE', CHERRY_SINGLE:'単チェリー BONUS',
+   SUIKA_WEAK:'弱スイカ', SUIKA_STRONG:'強スイカ CHANCE', SUIKA_SPECIAL:'特殊スイカ 激熱', SUIKA_CHANCE:'スイカチャンス目',
+   HERO_CHANCE:'HERO CHANCE', REACH_ME:'リーチ目 BONUS'
  };
- if(strengthNames[debug.roleStrength]) return strengthNames[debug.roleStrength];
- const names = {REPLAY:'REPLAY', BELL:'BAT', CHERRY:'CHERRY', SUIKA:'AMMO', HERO:'HERO', MISS:'ハズレ', BONUS_READY:'ボーナス図柄揃い', INVALID_BONUS_LINE:'ボーナス図柄揃い（無効）', NONE:'払い出しなし'};
+ if(strengthNames[role]) return strengthNames[role];
+ if(['CHERRY','SUIKA'].includes(role) && strengthNames[debug.roleStrength]) return strengthNames[debug.roleStrength];
+ const names = {REPLAY:'REPLAY', BELL:'BELL', CHERRY:'CHERRY', SUIKA:'スイカ', HERO:'HERO CHANCE', MISS:'MISS ハズレ', BONUS_READY:'BONUS確定', INVALID_BONUS_LINE:'ボーナス図柄揃い（無効）', NONE:'払い出しなし'};
  return names[role] || role || '-';
 }
 function analyzeStopResult(result){
@@ -2199,9 +2308,19 @@ function analyzeStopResult(result){
  }
  debug.displayedRole = result?.displayedRole || debug.roleStrength || debug.currentRole;
  debug.visibleLineSymbols = visible.lineSummary.join(' | ');
- debug.evaluatedLineSymbols = visible.bonusMatch ? visible.bonusMatch.hit.symbols.join(' / ') : (visible.lines.find(item => item.line === visible.hitLine)?.symbols.join(' / ') || center.join(' / '));
+ debug.evaluatedLineSymbols = visible.activeSymbols.join(' / ');
+ debug.visibleRole = visible.visibleRole;
  debug.finalDisplayRole = visible.finalRole;
  debug.payoutRole = visible.payoutRole;
+ debug.payoutAmount = visible.pay;
+ debug.activePaylineName = visible.activePaylineName;
+ debug.activePaylineSymbols = visible.activeSymbols.join(' / ');
+ debug.visibleTopLineSymbols = visible.lines.find(item => item.line.key === 'top')?.symbols.join(' / ') || '-';
+ debug.visibleMiddleLineSymbols = visible.lines.find(item => item.line.key === 'middle')?.symbols.join(' / ') || '-';
+ debug.visibleBottomLineSymbols = visible.lines.find(item => item.line.key === 'bottom')?.symbols.join(' / ') || '-';
+ debug.dropSymbol = dropSymbolForFinalResult(result) || '-';
+ debug.isRoleMismatch = visible.isRoleMismatch;
+ debug.mismatchReason = visible.mismatchReason;
  debug.bonusLineMatched = visible.matchingBonus;
  debug.isInvalidBonusLine = visible.invalidBonus;
  debug.pendingBonusGameCount = state.pendingBonusGameCount || 0;
@@ -2217,6 +2336,11 @@ function analyzeStopResult(result){
  debug.bonusCanBePulledCenter = canPull(1);
  debug.bonusCanBePulledRight = canPull(2);
  debug.logDisplayName = displayRoleName(visible.finalRole, debug);
+ debug.isReplay = visible.finalRole === 'REPLAY';
+ debug.replayLine = debug.isReplay ? visible.activePaylineName : '-';
+ debug.replayHandledAsReplay = debug.isReplay && visible.payoutRole === 'REPLAY';
+ debug.replayPaysZero = !debug.isReplay || visible.pay === 0;
+ debug.replayAutoBetEnabled = debug.isReplay;
  debug.stopResult = debug.isReachMe ? `REACH:${debug.reachMeName}` : debug.roleStrength !== '-' ? debug.roleStrength : debug.currentRole;
  state.stopDebug = debug;
  return debug;
@@ -2284,12 +2408,99 @@ function scheduleBonusNotice(bonus, preferredType=null){
  }
 }
 
+const rareBonusChanceRates = {
+ CHERRY_WEAK:.15,
+ CHERRY_STRONG:.50,
+ SUIKA_WEAK:.18,
+ SUIKA_STRONG:.45,
+ SUIKA_SPECIAL:.70,
+ SUIKA_CHANCE:.35,
+ HERO:.40,
+ HERO_CHANCE:.40
+};
+function resolveRareBonusChance(result, visibleResult){
+ const role = visibleResult.finalRole;
+ const family = roleFamily(role);
+ const isRareRole = ['CHERRY','SUIKA','HERO'].includes(family);
+ const isChanceRole = ['HERO_CHANCE','SUIKA_STRONG','SUIKA_SPECIAL','SUIKA_CHANCE','CHERRY_STRONG'].includes(role);
+ const base = {
+   isRareRole,
+   isChanceRole,
+   isHeroChance:['HERO','HERO_CHANCE'].includes(role),
+   isBonusChanceCandidate:false,
+   bonusChanceRoll:'-',
+   bonusChanceHit:false,
+   bonusChanceRate:0,
+   bonusChanceReason:'対象外',
+   rareRoleName:isRareRole ? displayRoleName(role) : '-'
+ };
+ if(state.pendingBonus || state.bonusActive || result?.challengeGame) return base;
+ if(role === 'CHERRY_SINGLE'){
+   result.bonus = result.bonus || result.hiddenBonus || chooseBonusType();
+   result.hiddenBonus = null;
+   result.challenge = false;
+   state.rareNoChallengeCount = 0;
+   return {...base, isBonusChanceCandidate:true, bonusChanceHit:true, bonusChanceRate:1, bonusChanceRoll:0, bonusChanceReason:'単チェリー BONUS確定'};
+ }
+ if(role === 'REACH_ME'){
+   result.bonus = result.bonus || result.hiddenBonus || chooseBonusType();
+   result.hiddenBonus = null;
+   result.challenge = false;
+   state.rareNoChallengeCount = 0;
+   return {...base, isChanceRole:true, isBonusChanceCandidate:false, bonusChanceHit:true, bonusChanceRate:1, bonusChanceRoll:0, bonusChanceReason:'リーチ目 BONUS確定', rareRoleName:'リーチ目 BONUS'};
+ }
+ const rate = rareBonusChanceRates[role] || 0;
+ if(!rate){
+   if(result.hiddenBonus){
+     result.bonus = result.hiddenBonus;
+     result.hiddenBonus = null;
+     result.challenge = false;
+     return {...base, bonusChanceHit:true, bonusChanceRate:1, bonusChanceRoll:0, bonusChanceReason:'表示役優先・ボーナス成立'};
+   }
+   result.challenge = false;
+   return base;
+ }
+ const roll = Math.random();
+ const bonusForced = !!result.hiddenBonus;
+ const pityForced = state.rareNoChallengeCount >= 4;
+ const hit = bonusForced || pityForced || roll < rate;
+ result.challenge = hit;
+ if(hit) state.rareNoChallengeCount = 0;
+ else state.rareNoChallengeCount++;
+ return {
+   ...base,
+   isBonusChanceCandidate:true,
+   bonusChanceRoll:Number(roll.toFixed(4)),
+   bonusChanceHit:hit,
+   bonusChanceRate:rate,
+   bonusChanceReason:bonusForced ? 'ボーナス重複' : pityForced ? '連続非発展救済' : hit ? '発展抽選当選' : '発展抽選非当選'
+ };
+}
+
 function settle(){
  const r=applyActualStops(state.result); state.spinning=false; state.settling=false;
  const visibleResult = evaluateVisibleResult(r);
+ Object.assign(r, {
+   visibleRole:visibleResult.visibleRole,
+   finalDisplayRole:visibleResult.finalRole,
+   payoutRole:visibleResult.payoutRole,
+   payoutAmount:visibleResult.pay,
+   activePaylineName:visibleResult.activePaylineName,
+   activePaylineSymbols:visibleResult.activeSymbols,
+   isRoleMismatch:visibleResult.isRoleMismatch,
+   mismatchReason:visibleResult.mismatchReason
+ });
  state.pay = r.bonusGame ? (r.pay || 0) : visibleResult.pay;
  const stopDebug = analyzeStopResult(r);
+ const rareDevelopment = resolveRareBonusChance(r, visibleResult);
+ Object.assign(stopDebug, rareDevelopment);
  if(r.bonusGame){
+   r.finalDisplayRole = 'BONUS_GAME';
+   r.payoutRole = 'BONUS_GAME';
+   r.payoutAmount = state.pay;
+   stopDebug.finalDisplayRole = 'BONUS_GAME';
+   stopDebug.payoutRole = 'BONUS_GAME';
+   stopDebug.payoutAmount = state.pay;
    soundManager.playSe('payout');
    triggerCabinetEffect('payout', 420);
    state.bet=0;
@@ -2305,7 +2516,8 @@ function settle(){
    return;
  }
  if(visibleResult.payoutRole === 'REPLAY')state.bet=3; else state.bet=0;
- const roleHit = r.role === 'CHERRY' ? visibleResult.payoutRole === 'CHERRY' : r.role === 'SUIKA' ? (stopDebug.isWeakSuika && visibleResult.payoutRole === 'SUIKA') : visibleResult.payoutRole === r.role;
+ const finalFamily = roleFamily(visibleResult.finalRole);
+ const roleHit = visibleResult.payoutRole !== 'MISS' && visibleResult.payoutRole !== 'NONE';
  const pendingReadyHit = !!visibleResult.matchingBonus;
  const contradiction = hasContradiction(state.presentation, r.role, r.bonus || r.bonusReady || r.hiddenBonus);
  state.contradiction = contradiction;
@@ -2313,22 +2525,23 @@ function settle(){
  if(r.role==='REPLAY' && !roleHit) state.bet=0;
  if(visibleResult.payoutRole === 'BELL')state.bell++;
  if(!r.bonus && !r.bonusReady && !r.challenge){
-   if(['CHERRY','SUIKA','HERO'].includes(r.role) && roleHit) soundManager.playSe('rare');
+   if(['CHERRY','SUIKA','HERO'].includes(finalFamily)) soundManager.playSe('rare');
    else if(state.pay > 0) soundManager.playSe('payout');
  }
  if(state.presentation === 'warning') soundManager.playSe('warning');
  if(state.presentation === 'survive') soundManager.playSe('survive');
  if(contradiction) setLcdMood('silentContradiction', 1200);
  if(stopDebug.isReachMe) triggerCabinetEffect('reachme-hint', 760);
- if(['CHERRY','SUIKA','HERO'].includes(r.role) && roleHit) cabinetRareEffect(stopDebug, r);
+ if(['CHERRY','SUIKA','HERO'].includes(finalFamily)) cabinetRareEffect(stopDebug, r);
  else if(state.pay > 0) triggerCabinetEffect('payout', 460);
  const bonusReadyHitNow = !!(r.bonusReady && visibleResult.matchingBonus);
- const prizeShown = !pendingReadyHit && shouldRevealPrize(r) && (!r.bonusReady || bonusReadyHitNow) && (!getRoleSymbols(r.role) || roleHit) && !contradiction;
+ const prizeShown = !pendingReadyHit && shouldRevealPrize(r) && (!r.bonusReady || bonusReadyHitNow) && !contradiction;
  if(prizeShown){
    revealPrizeScene(r);
  }else{
    clearPrizeScene();
  }
+ stopDebug.dropSymbol = prizeShown ? state.currentDropSymbol : '-';
  if(!r.bonus && !r.bonusReady){
    if(contradiction){
      actorClasses('shadow');
@@ -2344,7 +2557,7 @@ function settle(){
    soundManager.playSe('bonus_confirm');
    triggerCabinetEffect('flash-strong', 760);
    setCabinetMode('bonus-confirm');
-   pushHistory(`${bonusInfo[state.pendingBonus].label}揃い`, 0);
+   pushHistory(`${bonusDisplayName(state.pendingBonus)}揃い BONUS START`, 0);
    autoStartBonusAfterReady(520);
 }else if(r.bonusReady){
    const readyHit = bonusReadyHitNow;
@@ -2369,7 +2582,7 @@ function settle(){
    }
  }else if(r.challenge){
    state.credit+=state.pay; state.diff+=state.pay;
-   pushHistory(`${r.role}${lineText(r)}`, state.pay);
+   pushHistory(`${displayRoleName(visibleResult.finalRole, stopDebug)}${lineText({...r,line:visibleResult.hitLine || r.line})}`, state.pay);
    setTimeout(()=>{ if(!state.spinning && !state.pendingBonus) startBonusChallenge(r); }, 760);
  }else{
    state.credit+=state.pay; state.diff+=state.pay;
@@ -2539,8 +2752,9 @@ function updateHeroRuntimeDebug(){
    ['currentHeroCostume', state.heroCostume],
    ['currentHeroAction', state.heroAction],
    ['currentPerformanceType', state.presentation || '-'],
-   ['currentEnemyType', `${state.enemyA || '-'} / ${state.enemyB || '-'}`],
+   ['currentEnemyType', `${state.enemyA || '-'} / ${state.enemyB || '-'} / ${state.enemyC || '-'}`],
    ['currentEnemyAction', state.currentEnemyAction || '-'],
+   ['zombieCrossCount', state.zombieCrossCount || 0],
    ['currentDropSymbol', state.currentDropSymbol || '-'],
    ['isZombieWalkVisible', String(state.currentSceneCategory === 'zombie')],
    ['isCrateVisible', String(state.currentSceneCategory === 'crate')],
@@ -2555,6 +2769,15 @@ function updateHeroRuntimeDebug(){
    ['reviveCandidate', String(!!state.challenge?.revive)],
    ['displayedRole', stop.displayedRole || '-'],
    ['roleStrength', stop.roleStrength || '-'],
+   ['isRareRole', String(!!stop.isRareRole)],
+   ['isChanceRole', String(!!stop.isChanceRole)],
+   ['isHeroChance', String(!!stop.isHeroChance)],
+   ['isBonusChanceCandidate', String(!!stop.isBonusChanceCandidate)],
+   ['bonusChanceRoll', stop.bonusChanceRoll ?? '-'],
+   ['bonusChanceHit', String(!!stop.bonusChanceHit)],
+   ['bonusChanceRate', stop.bonusChanceRate ?? 0],
+   ['bonusChanceReason', stop.bonusChanceReason || '-'],
+   ['rareRoleName', stop.rareRoleName || '-'],
    ['pendingBonus', stop.pendingBonus || state.pendingBonus || '-'],
    ['currentBonusType', stop.currentBonusType || '-'],
    ['leftStopSymbol', stop.leftStopSymbol || '-'],
@@ -2576,8 +2799,23 @@ function updateHeroRuntimeDebug(){
    ['visibleLineSymbols', stop.visibleLineSymbols || '-'],
    ['evaluatedLineSymbols', stop.evaluatedLineSymbols || '-'],
    ['internalRole', stop.internalRole || '-'],
+   ['visibleRole', stop.visibleRole || '-'],
    ['finalDisplayRole', stop.finalDisplayRole || '-'],
    ['payoutRole', stop.payoutRole || '-'],
+   ['payoutAmount', stop.payoutAmount ?? 0],
+   ['activePaylineName', stop.activePaylineName || '-'],
+   ['activePaylineSymbols', stop.activePaylineSymbols || '-'],
+   ['visibleTopLineSymbols', stop.visibleTopLineSymbols || '-'],
+   ['visibleMiddleLineSymbols', stop.visibleMiddleLineSymbols || '-'],
+   ['visibleBottomLineSymbols', stop.visibleBottomLineSymbols || '-'],
+   ['dropSymbol', stop.dropSymbol || '-'],
+   ['isRoleMismatch', String(!!stop.isRoleMismatch)],
+   ['mismatchReason', stop.mismatchReason || '-'],
+   ['isReplay', String(!!stop.isReplay)],
+   ['replayLine', stop.replayLine || '-'],
+   ['replayHandledAsReplay', String(!!stop.replayHandledAsReplay)],
+   ['replayPaysZero', String(!!stop.replayPaysZero)],
+   ['replayAutoBetEnabled', String(!!stop.replayAutoBetEnabled)],
    ['bonusLineMatched', String(!!stop.bonusLineMatched)],
    ['isInvalidBonusLine', String(!!stop.isInvalidBonusLine)],
    ['pendingBonusGameCount', stop.pendingBonusGameCount ?? state.pendingBonusGameCount ?? 0],

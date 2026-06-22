@@ -2104,3 +2104,63 @@ body.debug-position .stop-hit{
     margin-top:0 !important;
   }
 }
+
+/* Stable normal-scene zombie movement and combat sizing */
+.enemy{
+  width:22% !important;
+  max-width:22% !important;
+  height:42% !important;
+  object-fit:contain !important;
+  object-position:center bottom !important;
+}
+.enemy-c{
+  right:0 !important;
+  opacity:.72;
+}
+.lcd-window.scene-zombie .enemy.enemy-a.anim-walk,
+.lcd-window.scene-zombie .enemy.enemy-b.anim-walk,
+.lcd-window.scene-zombie .enemy.enemy-c.anim-walk{
+  right:auto !important;
+  bottom:4% !important;
+  width:22% !important;
+  height:42% !important;
+  opacity:0;
+  animation-name:zombieCrossFull !important;
+  animation-duration:2.2s !important;
+  animation-timing-function:linear !important;
+  animation-iteration-count:1 !important;
+  animation-fill-mode:both !important;
+}
+.lcd-window.scene-zombie .enemy-a{left:105% !important;animation-delay:0s !important}
+.lcd-window.scene-zombie .enemy-b{left:118% !important;animation-delay:.2s !important}
+.lcd-window.scene-zombie .enemy-c{left:132% !important;animation-delay:.4s !important}
+.lcd-window.scene-zombie.zombie-count-1 .enemy-b,
+.lcd-window.scene-zombie.zombie-count-1 .enemy-c,
+.lcd-window.scene-zombie.zombie-count-2 .enemy-c{
+  visibility:hidden !important;
+}
+.lcd-window.scene-combat .enemy,
+.lcd-window.scene-combat .enemy.anim-hit,
+.lcd-window.scene-combat .enemy.anim-down{
+  bottom:4% !important;
+  width:22% !important;
+  max-width:22% !important;
+  height:42% !important;
+  object-fit:contain !important;
+  object-position:center bottom !important;
+}
+.lcd-window.scene-combat .enemy-a{right:18.8% !important;left:auto !important}
+.lcd-window.scene-combat .enemy-b{right:5.2% !important;left:auto !important}
+.lcd-window.scene-combat .enemy.anim-down{
+  animation:zombieDownInPlace .62s ease-out forwards !important;
+}
+@keyframes zombieCrossFull{
+  0%{transform:translateX(0) scaleX(-1);opacity:0}
+  7%{opacity:.94}
+  90%{opacity:.94}
+  100%{transform:translateX(-720%) scaleX(-1);opacity:0}
+}
+@keyframes zombieDownInPlace{
+  0%{transform:scaleX(-1) translateY(0) rotate(0);opacity:1}
+  100%{transform:scaleX(-1) translateY(8%) rotate(8deg);opacity:.4}
+}
